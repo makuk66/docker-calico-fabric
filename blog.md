@@ -307,6 +307,8 @@ Probably not the best place, but it will do for the purpose here.
 ```
 
 Next, setup Consul and Etcd. It's kinda odd we need two distributed discovery databases; hopefully that will get simplified.
+On #calico smc_calico says "we'd like to add support for consul; libnetwork uses libkv so, eventually, they'll have support for etcd too (but libkv's etcd support is patchy right now)").
+
 The fabric code is written to only install the Consul server to one host (trinity10), and configures the docker daemons on all machines to point to it.
 
 ```
