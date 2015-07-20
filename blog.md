@@ -495,7 +495,8 @@ At last, we're ready to try some containers.
 
 First container A, on trinity10:
 
-```(venv)crab:docker-calico-fabric mak$ fab create_test_containerA
+```
+(venv)crab:docker-calico-fabric mak$ fab create_test_containerA
 [trinity10] Executing task 'create_test_containerA'
 [trinity10] run: docker pull busybox:latest
 [trinity10] out: latest: Pulling from busybox
