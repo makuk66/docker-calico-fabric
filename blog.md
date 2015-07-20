@@ -12,6 +12,7 @@ start with a completely clean slate, without tedious keyboard entry. See
 docker/calico installation.
 
 So let's get started.
+You can follow along in [the fabfile](https://github.com/makuk66/docker-calico-fabric/blob/master/fabfile.py) if you want to see code.
 
 Checking out the repo:
 
