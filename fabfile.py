@@ -383,13 +383,13 @@ def create_test_solrclient():
     with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
         solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr1')
     name='solrclient-' + id_generator()
-    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sS http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
+    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
 
     solr2_ip_address=None
     with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
         solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr2')
     name='solrclient-' + id_generator()
-    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sS http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
+    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
 
 @roles('docker_cli')
 def docker_ps():
