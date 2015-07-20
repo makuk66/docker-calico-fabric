@@ -285,7 +285,9 @@ You should really use a local registry for the nodes to share, but that's for an
 ```
 
 By the way, that `makuk66/docker-calico-devices` image is a temporary hack;
-it should be `makuk66/docker-solr` once I figure out a problem with its EXPOSE.
+it should be `makuk66/docker-solr` once I figure out a problem with its EXPOSE:
+if you run `docker run --publish-service solrbad.net2.calico --name solrbad -tid makuk66/docker-solr:latest bash`
+you get both a `eth0` and `cali1` device, instead of just a the single `cali0` device.
 
 
 Next, get Calico. This installs as `calicoctl` in the home directory.
