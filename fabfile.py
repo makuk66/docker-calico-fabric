@@ -369,20 +369,6 @@ def create_test_solr1():
 def create_test_solr2():
     create_test_solr("solr2")
 
-@roles('solrclientdockerhost')
-def create_test_solrclient():
-    solr1_ip_address=None
-    with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
-        solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr1')
-
-    solr2_ip_address=None
-    with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
-        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr2')
-
-    container_id = create_test_solr("solrclient")
-    run("docker exec -it {} curl http://{}:8983/".format(container_id, solr1_ip_address)) # should show a redirect to /solr
-    run("docker exec -it {} curl http://{}:8983/".format(container_id, solr2_ip_address)) # should show a redirect to /solr
-
 def create_test_solr(name):
     run("docker pull {}".format(SOLR_IMAGE))
     with settings(host_string=get_docker_host_for_role('zookeeperdockerhost')):
@@ -390,6 +376,20 @@ def create_test_solr(name):
     container_id=run("docker run --publish-service {}.net2.calico --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(name, name, SOLR_IMAGE, zookeeper_address))
     run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
     return container_id
+
+@roles('solrclientdockerhost')
+def create_test_solrclient():
+    solr1_ip_address=None
+    with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
+        solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr1')
+    name='solrclient-' + id_generator()
+    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sS http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
+
+    solr2_ip_address=None
+    with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
+        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr2')
+    name='solrclient-' + id_generator()
+    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sS http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
 
 @roles('docker_cli')
 def docker_ps():
