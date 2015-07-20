@@ -352,8 +352,8 @@ def pingAB():
 
 @roles('zookeeperdockerhost')
 def create_test_zookeeper():
-    run("docker pull {}".format(zookeeper_image))
-    container_id=run("docker run --publish-service zookeeper.net2.calico --name {} -tid {}".format(ZOOKEEPER_NAME, zookeeper_image))
+    run("docker pull {}".format(ZOOKEEPER_IMAGE))
+    container_id=run("docker run --publish-service zookeeper.net2.calico --name {} -tid {}".format(ZOOKEEPER_NAME, ZOOKEEPER_IMAGE))
     run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
 
 @roles('all')
