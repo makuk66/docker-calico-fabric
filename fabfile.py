@@ -44,6 +44,10 @@ ZOOKEEPER_NAME='zookeeper3'
 BUSYBOX_IMAGE='busybox:latest'
 UBUNTU_IMAGE='ubuntu:latest'
 
+# Use "a" prefix per https://github.com/docker/libnetwork/issues/401 workaround
+NET_AB="anetab"
+NET_SOLR="asolr"
+
 env.etcd_client_port = 4001
 env.etcd_peer_port = 7001
 
@@ -268,8 +272,8 @@ def start_calico_containers():
 @roles('docker_cli')
 def create_networks():
     """ create two example networks """
-    run("docker network create --driver=calico net1")
-    run("docker network create --driver=calico net2")
+    run("docker network create --driver=calico " + NET_AB)
+    run("docker network create --driver=calico " + NET_SOLR)
     run("docker network ls")
 
 @roles('docker_cli')
@@ -300,7 +304,7 @@ def create_test_containerDCD():
     name = id_generator()
     container_name='c-' + name
     service_name='srv{}'.format(name)
-    full_service_name='{}.net2.calico'.format(service_name)
+    full_service_name='{}.{}.calico'.format(service_name, NET_SOLR)
     run("docker pull {}".format(image), pty=False)
     container_id=run("docker run --publish-service {} --name {} -tid {}".format(full_service_name, container_name, image))
     inspect_container(container_id)
@@ -313,7 +317,7 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
 
 def create_test_container(name='', image=BUSYBOX_IMAGE):
     service_name='srv{}'.format(name)
-    full_service_name='{}.net1.calico'.format(service_name)
+    full_service_name='{}.{}.calico'.format(service_name, NET_AB)
     container_name='c-' + name
     container_id=run("docker pull {}".format(image), pty=False)
     container_id=run("docker run --publish-service {} --name {} -tid {}".format(full_service_name, container_name, image))
@@ -353,7 +357,7 @@ def pingAB():
 @roles('zookeeperdockerhost')
 def create_test_zookeeper():
     run("docker pull {}".format(ZOOKEEPER_IMAGE))
-    container_id=run("docker run --publish-service zookeeper.net2.calico --name {} -tid {}".format(ZOOKEEPER_NAME, ZOOKEEPER_IMAGE))
+    container_id=run("docker run --publish-service zookeeper.{}.calico --name {} -tid {}".format(NET_SOLR, ZOOKEEPER_NAME, ZOOKEEPER_IMAGE))
     run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
 
 @roles('all')
@@ -373,7 +377,7 @@ def create_test_solr(name):
     run("docker pull {}".format(SOLR_IMAGE))
     with settings(host_string=get_docker_host_for_role('zookeeperdockerhost')):
         zookeeper_address=run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + ZOOKEEPER_NAME)
-    container_id=run("docker run --publish-service {}.net2.calico --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(name, name, SOLR_IMAGE, zookeeper_address))
+    container_id=run("docker run --publish-service {}.{}.calico --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(name, NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
     run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
     return container_id
 
@@ -383,13 +387,13 @@ def create_test_solrclient():
     with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
         solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr1')
     name='solrclient-' + id_generator()
-    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
+    container_id=run("docker run --publish-service {}.{}.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
 
     solr2_ip_address=None
     with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
         solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr2')
     name='solrclient-' + id_generator()
-    container_id=run("docker run --publish-service {}.net2.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, name, SOLR_IMAGE, solr1_ip_address))
+    container_id=run("docker run --publish-service {}.{}.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
 
 @roles('docker_cli')
 def docker_ps():
