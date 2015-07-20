@@ -576,7 +576,7 @@ Disconnecting from trinity10... done.
 
 Notice how that `ip addr list` there crashed busybox.
 I've seen a [bug report at calico](https://github.com/Metaswitch/calico-docker/issues/4) about that, which was closed as an upstream bug.
-I don't see one in [busybox's bug tracker](https://bugs.busybox.net/) currently.
+I [filed one there](https://bugs.busybox.net/show_bug.cgi?id=8231).
 
 Container A is running on 192.168.89.1.
 
