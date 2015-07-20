@@ -6,13 +6,17 @@ I used [this Vagrant example](https://github.com/Metaswitch/calico-ubuntu-vagran
 
 - I automated my cluster OS re-installation, so I can easily
 start with a completely clean slate, without tedious keyboard entry. See
-[ubuntu-custom-iso repo](https://github.com/makuk66/ubuntu-custom-iso).
+[ubuntu-custom-iso repo](https://github.com/makuk66/ubuntu-custom-iso). Now
+I can just insert the USB stick, reboot, hit F11, select the USB stick to boot from,
+and hit return to start the automatic installation.
 
 - I use [Fabric](http://www.fabfile.org) to automate the
 docker/calico installation.
 
 So let's get started.
 You can follow along in [the fabfile](https://github.com/makuk66/docker-calico-fabric/blob/master/fabfile.py) if you want to see code.
+In the output below "crab" is my laptop hostname, and trinity10/trinity20/trinity30 are cluster nodes.
+If you see "..." I've discarded output noise.
 
 Checking out the repo:
 
@@ -170,8 +174,7 @@ Disconnecting from trinity10... done.
 Disconnecting from trinity20... done.
 ```
 
-Installing OS pre-requisites. I've removed some `apt` output noise,
-and only show the output for trinity10; the same happens on trinity20/trinity30:
+Installing OS pre-requisites. I only show the output for trinity10; the same happens on trinity20/trinity30:
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab install_prerequisites
@@ -192,7 +195,7 @@ and only show the output for trinity10; the same happens on trinity20/trinity30:
 Now we're getting to the fun bit.
 I install the experimental docker, as recommeded by Docker Inc., to make sure it does the appropriate package things.
 Then I replace the docker command with the one Calico's example uses, for compatibility.
-In due course I expect just installing the official docker version 1.8 or later should be sufficient.
+In due course I expect I can just install the official docker version 1.8 or later.
 
 ```
 (venv)crab:docker-calico-fabric mak$  fab install_experimental_docker
@@ -306,7 +309,7 @@ Probably not the best place, but it will do for the purpose here.
 ```
 
 Next, setup Consul and Etcd. It's kinda odd we need two distributed discovery databases; hopefully that will get simplified.
-The fabric code is written to only install the Consul server to one host, and configures the docker daemons to point to it.
+The fabric code is written to only install the Consul server to one host (trinity10), and configures the docker daemons on all machines to point to it.
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab install_consul
@@ -431,7 +434,7 @@ creating and starting calico-node
 Done.
 ```
 
-Next we'll create two test networks:
+Next we'll create two test networks, 'net1' and 'net2':
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_networks
@@ -568,7 +571,9 @@ Done.
 Disconnecting from trinity10... done.
 ```
 
-Notice how that `ip addr list` there crashed busybox. I've seen a bug about that, supposedly fixed.
+Notice how that `ip addr list` there crashed busybox.
+I've seen a [bug report at calico](https://github.com/Metaswitch/calico-docker/issues/4) about that, which was closed as an upstream bug.
+I don't see one in [busybox's bug tracker](https://bugs.busybox.net/) currently.
 
 Container A is running on 192.168.89.1.
 I wish I could control that range better, and use 192.168.89.10-200. to leave some room for other hosts. How can I do that?
