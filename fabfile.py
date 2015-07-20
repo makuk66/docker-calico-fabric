@@ -372,11 +372,11 @@ def create_test_solr2():
 @roles('solrclientdockerhost')
 def create_test_solrclient():
     solr1_ip_address=None
-    with settings(host_string=get_docker_host_for_role('solr1')):
+    with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
         solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr1')
 
     solr2_ip_address=None
-    with settings(host_string=get_docker_host_for_role('solr2')):
+    with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
         solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr2')
 
     container_id = create_test_solr("solrclient")
