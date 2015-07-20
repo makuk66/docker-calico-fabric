@@ -254,9 +254,8 @@ def start_calico_containers():
     """ start Calico """
     existing = run("docker ps --filter=name=calico-node | tail -n +2")
     if existing == "":
-        ipv4_address = get_addressv4_address()
         print "creating and starting calico-node"
-        sudo("./calicoctl node --ip={} --node-image=calico/node:libnetwork".format(ipv4_address))
+        sudo("./calicoctl node")
     elif "Up" in existing:
         print "calico-node already running"
         return
