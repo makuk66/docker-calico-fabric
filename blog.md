@@ -288,9 +288,7 @@ You should really use a local registry for the nodes to share, but that's for an
 ```
 
 By the way, that `makuk66/docker-calico-devices` image is a temporary hack;
-it should be `makuk66/docker-solr` once I figure out a problem with its EXPOSE:
-if you run `docker run --publish-service solrbad.net2.calico --name solrbad -tid makuk66/docker-solr:latest bash`
-you get both a `eth0` and `cali1` device, instead of just a the single `cali0` device.
+it should be `makuk66/docker-solr` once I figure out a [problem with its EXPOSE](https://github.com/Metaswitch/calico-docker/issues/341).
 
 
 Next, get Calico. This installs as `calicoctl` in the home directory.
@@ -457,7 +455,10 @@ Next we'll create two test networks, 'net1' and 'net2':
 [trinity10] out: 
 ```
 
-and create an address pool:
+and create an address pool.
+I wish I could control that range better, and use e.g. 192.168.89.10-200. to leave some room for other hosts.
+There is a [enhancement request](https://github.com/Metaswitch/calico-docker/issues/340) for that.
+
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab calicoctl_pool
@@ -576,7 +577,6 @@ I've seen a [bug report at calico](https://github.com/Metaswitch/calico-docker/i
 I don't see one in [busybox's bug tracker](https://bugs.busybox.net/) currently.
 
 Container A is running on 192.168.89.1.
-I wish I could control that range better, and use 192.168.89.10-200. to leave some room for other hosts. How can I do that?
 
 Next, container B, on trinity20:
 
