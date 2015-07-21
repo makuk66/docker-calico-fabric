@@ -116,39 +116,6 @@ def install_experimental_docker():
     run("docker version")
 
 @roles('all')
-def destroy_everything():
-    """ 
-    Use with caution, not even sure this is a good idea
-
-    """
-    current_docker_version = run("docker version | grep '^Server version: ' | sed 's/^.* //'")
-    if not "command not found" in current_docker_version:
-        if not re.match(r'^\d+.*', current_docker_version):
-            raise Exception("cannot determine docker version in {}".format(current_docker_version))
-        sudo('stop docker || echo "could not stop docker"')
-        sudo('apt-get --yes remove lxc-docker-{}'.format(current_docker_version))
-        disconnect_all()
-
-    sudo('rm -fr /etc/docker/')
-    sudo('rm -fr /var/lib/docker/')
-    sudo('rm -fr /var/run/docker/')
-    sudo('rm -f /var/run/docker.pid')
-    sudo('rm -f /var/run/docker.sock')
-    sudo('rm -f /etc/init.d/docker')
-    sudo('rm -f /etc/init/docker.conf')
-    sudo('rm -f /etc/default/docker')
-    sudo('rm -f /etc/apt/sources.list.d/docker.list')
-    sudo('rm -f /etc/apparmor.d/docker')
-    sudo('rm -f /etc/apparmor.d/cache/docker')
-    sudo('rm -f /var/log/upstart/docker.log*')
-    sudo('delgroup docker')
-    # Note: does not remove apt GPG key or the docker0 bridge
-    sudo('rm -f /usr/bin/consul')
-    sudo('rm -fr /tmp/consul')
-    sudo('rm -fr /etc/init/consul.conf')
-    run('rm calicoctl')
-
-@roles('all')
 def docker_version():
     """ display docker version and status """
     run('docker version')
