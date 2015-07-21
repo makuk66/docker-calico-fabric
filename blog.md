@@ -404,7 +404,7 @@ Now all the bits are in place, and we can start the Calico containers:
 [trinity10] out: 
 
 creating and starting calico-node
-[trinity10] sudo: ./calicoctl node --ip=192.168.77.10 --node-image=calico/node:libnetwork
+[trinity10] sudo: ./calicoctl node --ip=192.168.77.10
 [trinity10] out: Calico node is running with id: c82d2c984d20a1ce9da58233a62e15bfef8f2c7c3a5b1ad646ee715b0d8566e3
 [trinity10] out: 
 
@@ -415,7 +415,7 @@ creating and starting calico-node
 [trinity20] out: 
 
 creating and starting calico-node
-[trinity20] sudo: ./calicoctl node --ip=192.168.77.20 --node-image=calico/node:libnetwork
+[trinity20] sudo: ./calicoctl node --ip=192.168.77.20
 [trinity20] out: Calico node is running with id: f9c0c07379bf36639720276e36fa103e1549fe20f614b7ed43e84ed814715e2b
 [trinity20] out: 
 
@@ -426,7 +426,7 @@ creating and starting calico-node
 [trinity30] out: 
 
 creating and starting calico-node
-[trinity30] sudo: ./calicoctl node --ip=192.168.77.30 --node-image=calico/node:libnetwork
+[trinity30] sudo: ./calicoctl node --ip=192.168.77.30
 [trinity30] out: Calico node is running with id: 9a989bdf4d48a9eb8862f9bd290265714f99aade7286178430b0d992149c2fac
 [trinity30] out: 
 
@@ -434,16 +434,16 @@ creating and starting calico-node
 Done.
 ```
 
-Next we'll create two test networks, 'net1' and 'net2':
+Next we'll create two test networks, 'anetab' and 'anetsolr':
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_networks
 [trinity10] Executing task 'create_networks'
-[trinity10] run: docker network create --driver=calico net1
+[trinity10] run: docker network create --driver=calico anetab
 [trinity10] out: 239571e5772ef29890a1102894a02aad763b418c567ea61eb9abb8e0e3bae6a2
 [trinity10] out: 
 
-[trinity10] run: docker network create --driver=calico net2
+[trinity10] run: docker network create --driver=calico anetsolr
 [trinity10] out: b454ec5c2f4c1a5cf8ffb9ca20392f6698a30a993a5b3be7109236a442b70901
 [trinity10] out: 
 
@@ -452,8 +452,8 @@ Next we'll create two test networks, 'net1' and 'net2':
 [trinity10] out: 074f25ce96c1        none                null                
 [trinity10] out: 4d57c4c3ea4c        host                host                
 [trinity10] out: 60aac8fc0aa3        bridge              bridge              
-[trinity10] out: 239571e5772e        net1                calico              
-[trinity10] out: b454ec5c2f4c        net2                calico              
+[trinity10] out: 239571e5772e        anetab              calico              
+[trinity10] out: b454ec5c2f4c        anetsolr            calico              
 [trinity10] out: 
 ```
 
@@ -517,35 +517,35 @@ First container A, on trinity10:
 [trinity10] out: Status: Image is up to date for busybox:latest
 [trinity10] out: 
 
-[trinity10] run: docker run --publish-service srvA.net1.calico --name c-A -tid busybox:latest
-[trinity10] out: 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938
+[trinity10] run: docker run --publish-service srvA.anetab.calico --name c-A -tid busybox:latest
+[trinity10] out: 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7
 [trinity10] out: 
 
-[trinity10] run: docker inspect --format '{{.Id}}' 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938
-[trinity10] out: 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938
+[trinity10] run: docker inspect --format '{{.Id}}' 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7
+[trinity10] out: 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7
 [trinity10] out: 
 
-[trinity10] run: docker inspect --format '{{.Name}}' 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938
+[trinity10] run: docker inspect --format '{{.Name}}' 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7
 [trinity10] out: /c-A
 [trinity10] out: 
 
-[trinity10] run: docker inspect --format '{{ .NetworkSettings.IPAddress }}' 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938
+[trinity10] run: docker inspect --format '{{ .NetworkSettings.IPAddress }}' 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7
 [trinity10] out: 192.168.89.1
 [trinity10] out: 
 
-container_id=641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938, container_name=c-A, ip_address=192.168.89.1
-[trinity10] run: docker exec -i 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938 hostname
-[trinity10] out: 641ca5012042
+container_id=71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7, container_name=c-A, ip_address=192.168.89.1
+[trinity10] run: docker exec -i 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7 hostname
+[trinity10] out: 71b55622a021
 [trinity10] out: 
 
-[trinity10] run: docker exec -i 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938 ls -l /sys/devices/virtual/net/
+[trinity10] run: docker exec -i 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7 ls -l /sys/devices/virtual/net/
 [trinity10] out: total 0
-[trinity10] out: drwxr-xr-x    5 root     root             0 Jul 20 12:21 cali0
-[trinity10] out: drwxr-xr-x    5 root     root             0 Jul 20 12:21 lo
-[trinity10] out: drwxr-xr-x    5 root     root             0 Jul 20 12:21 tunl0
+[trinity10] out: drwxr-xr-x    5 root     root             0 Jul 21 12:58 cali0
+[trinity10] out: drwxr-xr-x    5 root     root             0 Jul 21 12:58 lo
+[trinity10] out: drwxr-xr-x    5 root     root             0 Jul 21 12:58 tunl0
 [trinity10] out: 
 
-[trinity10] run: docker exec -i 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938 ip link list
+[trinity10] run: docker exec -i 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7 ip link list
 [trinity10] out: 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default 
 [trinity10] out:     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
 [trinity10] out: 2: tunl0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN mode DEFAULT group default 
@@ -554,7 +554,7 @@ container_id=641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938, c
 [trinity10] out:     link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff
 [trinity10] out: 
 
-[trinity10] run: docker exec -i 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938 ip addr list
+[trinity10] run: docker exec -i 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7 ip addr list
 [trinity10] out: 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default 
 [trinity10] out:     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
 [trinity10] out:     inet 127.0.0.1/8 scope host lo
@@ -562,16 +562,12 @@ container_id=641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938, c
 [trinity10] out: 
 
 
-Warning: run() received nonzero return code 139 while executing 'docker exec -i 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938 ip addr list'!
+Warning: run() received nonzero return code 139 while executing 'docker exec -i 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7 ip addr list'!
 
-[trinity10] run: docker exec -i 641ca50120429e0ede0894865fb3854d1d9bb6727c782899f2e405eb349ac938 ip route list
+[trinity10] run: docker exec -i 71b55622a021b7e939210934c6c952567e9f5aaa92dff7f34562098b94e0d4f7 ip route list
 [trinity10] out: default via 192.168.77.10 dev cali0 
 [trinity10] out: 192.168.77.10 dev cali0  scope link 
 [trinity10] out: 
-
-
-Done.
-Disconnecting from trinity10... done.
 ```
 
 Notice how that `ip addr list` there crashed busybox.
@@ -595,44 +591,44 @@ Next, container B, on trinity20:
 [trinity20] out: Status: Image is up to date for busybox:latest
 [trinity20] out: 
 
-[trinity20] run: docker run --publish-service srvB.net1.calico --name c-B -tid busybox:latest
-[trinity20] out: 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76
+[trinity20] run: docker run --publish-service srvB.anetab.calico --name c-B -tid busybox:latest
+[trinity20] out: 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942
 [trinity20] out: 
 
-[trinity20] run: docker inspect --format '{{.Id}}' 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76
-[trinity20] out: 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76
+[trinity20] run: docker inspect --format '{{.Id}}' 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942
+[trinity20] out: 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942
 [trinity20] out: 
 
-[trinity20] run: docker inspect --format '{{.Name}}' 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76
+[trinity20] run: docker inspect --format '{{.Name}}' 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942
 [trinity20] out: /c-B
 [trinity20] out: 
 
-[trinity20] run: docker inspect --format '{{ .NetworkSettings.IPAddress }}' 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76
+[trinity20] run: docker inspect --format '{{ .NetworkSettings.IPAddress }}' 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942
 [trinity20] out: 192.168.89.2
 [trinity20] out: 
 
-container_id=8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76, container_name=c-B, ip_address=192.168.89.2
-[trinity20] run: docker exec -i 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76 hostname
-[trinity20] out: 8002a2902e88
+container_id=4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942, container_name=c-B, ip_address=192.168.89.2
+[trinity20] run: docker exec -i 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942 hostname
+[trinity20] out: 4bb33ae29ff8
 [trinity20] out: 
 
-[trinity20] run: docker exec -i 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76 ls -l /sys/devices/virtual/net/
+[trinity20] run: docker exec -i 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942 ls -l /sys/devices/virtual/net/
 [trinity20] out: total 0
-[trinity20] out: drwxr-xr-x    5 root     root             0 Jul 20 12:25 cali0
-[trinity20] out: drwxr-xr-x    5 root     root             0 Jul 20 12:25 lo
-[trinity20] out: drwxr-xr-x    5 root     root             0 Jul 20 12:25 tunl0
+[trinity20] out: drwxr-xr-x    5 root     root             0 Jul 21 12:58 cali0
+[trinity20] out: drwxr-xr-x    5 root     root             0 Jul 21 12:58 lo
+[trinity20] out: drwxr-xr-x    5 root     root             0 Jul 21 12:58 tunl0
 [trinity20] out: 
 
-[trinity20] run: docker exec -i 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76 ip link list
+[trinity20] run: docker exec -i 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942 ip link list
 [trinity20] out: 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default 
 [trinity20] out:     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
 [trinity20] out: 2: tunl0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN mode DEFAULT group default 
 [trinity20] out:     link/ipip 0.0.0.0 brd 0.0.0.0
-[trinity20] out: 14: cali0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000
+[trinity20] out: 14: cali0: <NO-CARRIER,BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state DOWN mode DEFAULT group default qlen 1000
 [trinity20] out:     link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff
 [trinity20] out: 
 
-[trinity20] run: docker exec -i 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76 ip addr list
+[trinity20] run: docker exec -i 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942 ip addr list
 [trinity20] out: 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default 
 [trinity20] out:     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
 [trinity20] out:     inet 127.0.0.1/8 scope host lo
@@ -640,16 +636,12 @@ container_id=8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76, c
 [trinity20] out: 
 
 
-Warning: run() received nonzero return code 139 while executing 'docker exec -i 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76 ip addr list'!
+Warning: run() received nonzero return code 139 while executing 'docker exec -i 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942 ip addr list'!
 
-[trinity20] run: docker exec -i 8002a2902e8841f79de7d19aeac09316db00bb8242efcf669a76de1b5caf9a76 ip route list
+[trinity20] run: docker exec -i 4bb33ae29ff80340601f261dda70726f755d71f3d0e30e300db0a54d647f2942 ip route list
 [trinity20] out: default via 192.168.77.20 dev cali0 
 [trinity20] out: 192.168.77.20 dev cali0  scope link 
 [trinity20] out: 
-
-
-Done.
-Disconnecting from trinity20... done.
 ```
 
 Container B is running 192.168.89.2.
@@ -706,7 +698,7 @@ First zookeeper. I'll just put it on single container for now:
 [trinity10] out: 9ce81845fa8f: Pulling image (latest) from jplock/zookeeper 
 ...
 
-[trinity10] run: docker run --publish-service zookeeper.net2.calico --name zookeeper3 -tid jplock/zookeeper
+[trinity10] run: docker run --publish-service zookeeper.anetsolr.calico --name zookeeper3 -tid jplock/zookeeper
 [trinity10] out: 04d7bf4e1a00554f6d8e2912cd8f95e607bcfec7adb1f81e019ef9ead8c1cccc
 [trinity10] out: 
 
@@ -737,7 +729,7 @@ Next, Solr on a different machine:
 [trinity10] out: 192.168.89.3
 [trinity10] out: 
 
-[trinity10] run: docker run --publish-service solr1.net2.calico --name solr1 -tid makuk66/docker-calico-devices:latest bash -c '/opt/solr/bin/solr start -f -z 192.168.89.3:2181'
+[trinity10] run: docker run --publish-service solr1.anetsolr.calico --name solr1 -tid makuk66/docker-calico-devices:latest bash -c '/opt/solr/bin/solr start -f -z 192.168.89.3:2181'
 [trinity10] out: 4b4dd769c588ea44d41c1bbd4560419681005263caeeda493b5854951ecbba7d
 [trinity10] out: 
 
@@ -760,7 +752,7 @@ and a second one:
 [trinity10] out: 192.168.89.3
 [trinity10] out: 
 
-[trinity20] run: docker run --publish-service solr2.net2.calico --name solr2 -tid makuk66/docker-calico-devices:latest bash -c '/opt/solr/bin/solr start -f -z 192.168.89.3:2181'
+[trinity20] run: docker run --publish-service solr2.anetsolr.calico --name solr2 -tid makuk66/docker-calico-devices:latest bash -c '/opt/solr/bin/solr start -f -z 192.168.89.3:2181'
 [trinity20] out: 4a4cf249dcee670d13fb475b3be4a47e2a9d5a8a183bc62cc2627e6dc0762f22
 [trinity20] out: 
 
@@ -785,7 +777,7 @@ and let's see if a client can talk to them:
 [trinity20] out: 192.168.89.5
 [trinity20] out: 
 
-[trinity30] run: docker run --publish-service solrclient-OXLNA8.net2.calico --name solrclient-OXLNA8 -i makuk66/docker-calico-devices:latest curl -sSL http://192.168.89.4:8983/
+[trinity30] run: docker run --publish-service solrclient-OXLNA8.anetsolr.calico --name solrclient-OXLNA8 -i makuk66/docker-calico-devices:latest curl -sSL http://192.168.89.4:8983/
 ...
 [trinity30] out:   <title>Solr Admin</title>
 >
