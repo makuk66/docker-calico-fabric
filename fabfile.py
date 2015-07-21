@@ -36,7 +36,8 @@ env.user = "mak"
 CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v0.5.0/calicoctl"
 CONSUL_URL = "https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip"
 
-SOLR_IMAGE='makuk66/docker-solr'
+SOLR_IMAGE=makuk66/docker-calico-devices:latest
+#SOLR_IMAGE='makuk66/docker-solr'
 ZOOKEEPER_IMAGE='jplock/zookeeper'
 ZOOKEEPER_NAME='zookeeper3'
 
@@ -44,6 +45,7 @@ BUSYBOX_IMAGE='busybox:latest'
 UBUNTU_IMAGE='ubuntu:latest'
 
 # Use "a" prefix per https://github.com/docker/libnetwork/issues/401 workaround
+# not that that actually seems to work
 NET_AB="anetab"
 NET_SOLR="asolr"
 
@@ -414,6 +416,7 @@ def install():
     execute(check_etcd)
     execute(start_calico_containers)
     execute(calicoctl_pool)
+    execute(create_networks)
 
     execute(create_test_containerA)
     execute(create_test_containerB)
