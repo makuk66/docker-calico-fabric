@@ -33,7 +33,8 @@ env.consul_host = "trinity10"
 env.etcd_cluster_token = "etcd-cluster-2123"
 env.user = "mak"
 
-CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v0.5.2/calicoctl"
+CALICO_VERSION="0.5.2"
+CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/calicoctl".format(CALICO_VERSION)
 CONSUL_URL = "https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip"
 
 SOLR_IMAGE='makuk66/docker-calico-devices:latest'
@@ -99,11 +100,10 @@ def install_experimental_docker():
         sudo("dpkg --force-confmiss -i /var/cache/apt/archives/lxc-docker-1.8.0-dev_1.8.0*.deb")
         sudo('usermod -aG docker {}'.format(env.user))
         disconnect_all()
-    # replace with the one from the Vagrant example, which contains the calico plugin
-    filename = "docker-1.8.0-dev"
-    run("rm -f {}.gz {}.gz.[0-9]+".format(filename, filename)) # remove old downloads
-    run("wget https://github.com/Metaswitch/calico-docker/releases/download/v0.5.0/{}.gz > /dev/null 2>&1".format(filename))
-    run("gunzip -c {}.gz > {}".format(filename, filename))
+    # per https://github.com/Metaswitch/calico-docker/releases/tag/v0.5.2 release notes, use a pre-release version of docker
+    filename = "docker"
+    run("rm -f docker".format(filename, filename)) # remove old downloads
+    run("wget https://github.com/Metaswitch/calico-docker/releases/download/v{}/{} > /dev/null 2>&1".format(CALICO_VERSION, filename))
     run("chmod a+x {}".format(filename))
     if exists('/etc/init/docker.conf'):
         sudo("stop docker || echo oh well")
@@ -140,7 +140,7 @@ def install_calico():
         run("wget -nv {}".format(CALICOCTL_URL))
         run("chmod +x calicoctl")
 
-    sudo("docker pull calico/node:libnetwork", pty=False)
+    sudo("docker pull calico/node:v{}".format(CALICO_VERSION), pty=False)
     sudo("docker pull quay.io/coreos/etcd:v2.0.11", pty=False)
 
 def get_addressv4_address():
@@ -244,17 +244,37 @@ def create_networks():
     run("docker network create --driver=calico " + NET_SOLR)
     run("docker network ls")
 
+def get_profile_for_network(wanted_name):
+    # there must be a better way to get profiles for named networks.
+    networks = run("docker network ls")
+    found_network_id = None
+    for line in networks.split("\n"):
+        if line.startswith("NETWORK ID"):
+            continue # skip header
+        (network_id, name, type) = line.split()
+        if name == wanted_name:
+            found_network_id=network_id
+    if found_network_id == None:
+        raise Exception("network {} not found".format(wanted_name))
+    # the network ID is a short one like 6df57a08bc98. find the long version in the profiles
+    profiles = run("./calicoctl profile show")
+    for profile_line in profiles.split("\n"):
+        print "checking {} for {}".format(found_network_id, profile_line)
+        m = re.search('\s({}\S+)'.format(found_network_id), profile_line)
+        if m is not None:
+            return m.group(1)
+    raise Exception("no profile found for network {}".format(found_network_id))
+
+
 @roles('docker_cli')
 def create_network_profiles():
-    # there must be a better way to get profiles for named networks.
-    net_ab_id =   run("""docker network ls | awk '$2 == "{}"' | awk '{print $1}'""".format(NET_AB))
-    net_solr_id = run("""docker network ls | awk '$2 == "{}"' | awk '{print $1}'""".format(NET_SOLR))
-    net_ab_profile =   run("./calicoctl profile show | grep {} | sed 's/^| //' | sed 's/ |//'".format(net_ab_id))
-    net_solr_profile = run("./calicoctl profile show | grep {} | sed 's/^| //' | sed 's/ |//'".format(net_solr_id))
-
+    
+    net_ab_profile = get_profile_for_network(NET_AB)
     run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
+
+    net_solr_profile = get_profile_for_network(NET_SOLR)
     run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
-    run("./calicoctl profile {} rule add inbound allow tcp from destports 8983".format(net_solr_profile))
+    run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
 
 @roles('docker_cli')
 def calicoctl_pool():
@@ -356,6 +376,11 @@ def create_test_solr(name):
         zookeeper_address=run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + ZOOKEEPER_NAME)
     container_id=run("docker run --publish-service {}.{}.calico --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(name, NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
     run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
+
+    time.sleep(15)
+
+    run("docker logs {}".format(container_id))
+
     return container_id
 
 @roles('solrclientdockerhost')
@@ -371,6 +396,10 @@ def create_test_solrclient():
         solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr2')
     name='solrclient-' + id_generator()
     container_id=run("docker run --publish-service {}.{}.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
+
+@roles('solr1dockerhost')
+def solr_data():
+    run("docker exec -i -t solr1 /opt/solr/bin/solr create_collection c collection1 -shards 2 -p 8983")
 
 @roles('docker_cli')
 def add_bgp_peer():
@@ -403,6 +432,11 @@ def install():
     execute(create_test_containerB)
     execute(pingAB)
 
+    execute(add_bgp_peer)
+
     execute(create_test_zookeeper)
     execute(create_test_solr1)
     execute(create_test_solr2)
+
+    execute(create_test_solrclient)
+    execute(solr_data)
