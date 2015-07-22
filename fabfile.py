@@ -36,7 +36,7 @@ env.user = "mak"
 CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v0.5.0/calicoctl"
 CONSUL_URL = "https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip"
 
-SOLR_IMAGE=makuk66/docker-calico-devices:latest
+SOLR_IMAGE='makuk66/docker-calico-devices:latest'
 #SOLR_IMAGE='makuk66/docker-solr'
 ZOOKEEPER_IMAGE='jplock/zookeeper'
 ZOOKEEPER_NAME='zookeeper3'
@@ -47,7 +47,7 @@ UBUNTU_IMAGE='ubuntu:latest'
 # Use "a" prefix per https://github.com/docker/libnetwork/issues/401 workaround
 # not that that actually seems to work
 NET_AB="anetab"
-NET_SOLR="asolr"
+NET_SOLR="anetsolr"
 
 env.etcd_client_port = 4001
 env.etcd_peer_port = 7001
@@ -245,16 +245,25 @@ def create_networks():
     run("docker network ls")
 
 @roles('docker_cli')
+def create_network_profiles():
+    # there must be a better way to get profiles for named networks.
+    net_ab_id =   run("""docker network ls | awk '$2 == "{}"' | awk '{print $1}'""".format(NET_AB))
+    net_solr_id = run("""docker network ls | awk '$2 == "{}"' | awk '{print $1}'""".format(NET_SOLR))
+    net_ab_profile =   run("./calicoctl profile show | grep {} | sed 's/^| //' | sed 's/ |//'".format(net_ab_id))
+    net_solr_profile = run("./calicoctl profile show | grep {} | sed 's/^| //' | sed 's/ |//'".format(net_solr_id))
+
+    run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
+    run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
+    run("./calicoctl profile {} rule add inbound allow tcp from destports 8983".format(net_solr_profile))
+
+@roles('docker_cli')
 def calicoctl_pool():
     """ configure the Calico address pool """
     # TODO: how can we exclude .1
     run("./calicoctl pool show")
     run("./calicoctl pool add 192.168.89.0/24")
     run("./calicoctl pool remove 192.168.0.0/16")
-    # To allow access to the internet, do outbound NAT
-    # https://github.com/Metaswitch/calico-docker/blob/master/docs/FAQ.md#how-can-i-enable-nat-for-outgoing-traffic-from-containers-with-private-ip-addresses
-    # TODO: perhapds do this on the router instead
-    run("./calicoctl pool add 192.168.89.0/24 --nat-outgoing")
+    run("./calicoctl pool add 192.168.89.0/24")
     run("./calicoctl pool show")
 
 @roles('container_a_dockerhost')
@@ -342,7 +351,7 @@ def create_test_solr2():
     create_test_solr("solr2")
 
 def create_test_solr(name):
-    run("docker pull {}".format(SOLR_IMAGE))
+    run("docker pull {}".format(SOLR_IMAGE), pty=False)
     with settings(host_string=get_docker_host_for_role('zookeeperdockerhost')):
         zookeeper_address=run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + ZOOKEEPER_NAME)
     container_id=run("docker run --publish-service {}.{}.calico --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(name, NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
@@ -362,6 +371,10 @@ def create_test_solrclient():
         solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + 'solr2')
     name='solrclient-' + id_generator()
     container_id=run("docker run --publish-service {}.{}.calico --name {} -i {} curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
+
+@roles('docker_cli')
+def add_bgp_peer():
+    run("./calicoctl bgp peer add 192.168.77.1 as 64511")
 
 @roles('docker_cli')
 def docker_ps():
@@ -384,6 +397,7 @@ def install():
     execute(start_calico_containers)
     execute(calicoctl_pool)
     execute(create_networks)
+    execute(create_network_profiles)
 
     execute(create_test_containerA)
     execute(create_test_containerB)

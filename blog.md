@@ -457,10 +457,51 @@ Next we'll create two test networks, 'anetab' and 'anetsolr':
 [trinity10] out: 
 ```
 
-and create an address pool.
-I wish I could control that range better, and use e.g. 192.168.89.10-200. to leave some room for other hosts.
-There is a [enhancement request](https://github.com/Metaswitch/calico-docker/issues/340) for that.
+and configure profiles:
 
+```
+TODO: fab create_network_profiles
+```
+
+===delme
+Before I can ping them I need to allow it in the profile:
+
+```
+mak@trinity10:~$ docker network ls
+NETWORK ID          NAME                TYPE
+a4de27be0d6d        anetab              calico              
+fe7701ef4f78        asolrnet            calico              
+
+mak@trinity10:~$ ./calicoctl profile show
++------------------------------------------------------------------+
+|                               Name                               |
++------------------------------------------------------------------+
+| a4de27be0d6d709d7d223f38cdaf9dd0807f0d3c7b4a375c07ec158c8b2ca02f |
+| fe7701ef4f783c835fa93f1cb47108ab4db22d610a4ead0525345490cd6a61a8 |
++------------------------------------------------------------------+
+```
+
+I'll allow inbound ICMP to both:
+
+```
+mak@trinity10:~$ for profile in \
+  a4de27be0d6d709d7d223f38cdaf9dd0807f0d3c7b4a375c07ec158c8b2ca02f \
+  fe7701ef4f783c835fa93f1cb47108ab4db22d610a4ead0525345490cd6a61a8; do
+  ./calicoctl profile $profile rule add inbound --at=1 allow icmp
+done
+```
+
+There is some scope for improvement in my fabfile here -- I should be able to
+configure this when I create the network.
+
+```
+mak@trinity10:~$ profile=fe7701ef4f783c835fa93f1cb47108ab4db22d610a4ead0525345490cd6a61a8
+mak@trinity10:~$ ./calicoctl profile $profile rule add inbound allow --at=1 tcp to ports 8983
+```
+===delme
+
+
+Next we need to create an address pool.
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab calicoctl_pool
@@ -684,6 +725,27 @@ Disconnecting from trinity20... done.
 
 They sure can. Sweet!
 
+
+
+BGP
+---
+
+So, next, BGP routing so I can talk to them from my machine.
+The command has changed slightly:
+
+```
+mak@trinity10:~$ ./calicoctl bgp peer add 192.168.77.1 as 64511
+mak@trinity10:~$ 
+```
+
+On the Mikrotik side I used the same config as before,
+and I see routes for the containers.
+
+
+Solr
+----
+
+
 Next, I want to try and run a Solr cluster.
 That's a work in progress, but let's see how far we get.
 
@@ -793,9 +855,19 @@ Disconnecting from trinity20... done.
 
 Yes, it can.
 
-So, next:
-- routing so I can talk to them from my machine
-- do a solrcloud example that shows the servers talk together
+TODO: and from outside
+
+
+```
+fab create_test_zookeeper
+fab create_test_solr1
+fab create_test_solr2
+```
+
+Then go to http://192.
+
+
+
 
 
 
