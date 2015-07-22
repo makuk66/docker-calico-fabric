@@ -376,7 +376,7 @@ def create_test_solrclient():
 def add_bgp_peer():
     run("./calicoctl bgp peer add 192.168.77.1 as 64511")
 
-@roles('docker_cli')
+@roles('all')
 def docker_ps():
     """ run docker ps """
     run('docker ps')
