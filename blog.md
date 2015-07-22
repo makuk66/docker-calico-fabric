@@ -8,7 +8,8 @@ I used [this Vagrant example](https://github.com/Metaswitch/calico-ubuntu-vagran
 start with a completely clean slate, without tedious keyboard entry. See
 [ubuntu-custom-iso repo](https://github.com/makuk66/ubuntu-custom-iso). Now
 I can just insert the USB stick, reboot, hit F11, select the USB stick to boot from,
-and hit return to start the automatic installation.
+and hit return to start the automatic installation. Which is a big help, but if I'm going
+to test this regularly I'll swtich to some resettable VMs.
 
 - I use [Fabric](http://www.fabfile.org) to automate the
 docker/calico installation.
@@ -198,7 +199,7 @@ Then I replace the docker command with the one Calico's example uses, for compat
 In due course I expect I can just install the official docker version 1.8 or later.
 
 ```
-(venv)crab:docker-calico-fabric mak$  fab install_experimental_docker
+(venv)crab:docker-calico-fabric mak$ fab install_experimental_docker
 [trinity10] Executing task 'install_experimental_docker'
 [trinity10] run: docker version | grep '^Server version: ' | sed 's/^.* //'
 [trinity10] out: /bin/bash: docker: command not found
@@ -358,7 +359,7 @@ Next, etcd. It is configured to be a 3-node cluster on trinity10/trinity20/trini
 For large deployments you probably want to run this on separate small machines.
 
 ```
-(venv)crab:docker-calico-fabric mak$  fab run_etcd
+(venv)crab:docker-calico-fabric mak$ fab run_etcd
 [trinity10] Executing task 'run_etcd'
 [trinity10] run: ip -4 addr show dev eth0 | grep inet | awk '{print $2}' | sed -e 's,/.*,,'
 [trinity10] out: 192.168.77.10
@@ -440,68 +441,76 @@ Next we'll create two test networks, 'anetab' and 'anetsolr':
 (venv)crab:docker-calico-fabric mak$ fab create_networks
 [trinity10] Executing task 'create_networks'
 [trinity10] run: docker network create --driver=calico anetab
-[trinity10] out: 239571e5772ef29890a1102894a02aad763b418c567ea61eb9abb8e0e3bae6a2
+[trinity10] out: c0c463bf0fa6f0bc56e55a654172ab289979b23a60ab3dddc98e2c093b259d30
 [trinity10] out: 
 
 [trinity10] run: docker network create --driver=calico anetsolr
-[trinity10] out: b454ec5c2f4c1a5cf8ffb9ca20392f6698a30a993a5b3be7109236a442b70901
+[trinity10] out: b517afa66f5ae2f12792474ea2b3247844428c9da746237942e0b3bb1111e6f4
 [trinity10] out: 
 
 [trinity10] run: docker network ls
 [trinity10] out: NETWORK ID          NAME                TYPE
-[trinity10] out: 074f25ce96c1        none                null                
-[trinity10] out: 4d57c4c3ea4c        host                host                
-[trinity10] out: 60aac8fc0aa3        bridge              bridge              
-[trinity10] out: 239571e5772e        anetab              calico              
-[trinity10] out: b454ec5c2f4c        anetsolr            calico              
+[trinity10] out: 6df57a08bc98        host                host                
+[trinity10] out: 792af369e55c        bridge              bridge              
+[trinity10] out: c0c463bf0fa6        anetab              calico              
+[trinity10] out: b517afa66f5a        anetsolr            calico              
+[trinity10] out: b1302457a47c        none                null                
 [trinity10] out: 
 ```
 
-and configure profiles:
+and configure profiles (think AWS security groups or router iptables) for them:
 
 ```
-TODO: fab create_network_profiles
+(venv)crab:docker-calico-fabric mak$ fab create_network_profiles
+[trinity10] Executing task 'create_network_profiles'
+[trinity10] run: docker network ls
+[trinity10] out: NETWORK ID          NAME                TYPE
+[trinity10] out: b1302457a47c        none                null                
+[trinity10] out: 6df57a08bc98        host                host                
+[trinity10] out: 792af369e55c        bridge              bridge              
+[trinity10] out: c0c463bf0fa6        anetab              calico              
+[trinity10] out: b517afa66f5a        anetsolr            calico              
+[trinity10] out: 
+
+[trinity10] run: ./calicoctl profile show
+[trinity10] out: +------------------------------------------------------------------+
+[trinity10] out: |                               Name                               |
+[trinity10] out: +------------------------------------------------------------------+
+[trinity10] out: | b517afa66f5ae2f12792474ea2b3247844428c9da746237942e0b3bb1111e6f4 |
+[trinity10] out: | c0c463bf0fa6f0bc56e55a654172ab289979b23a60ab3dddc98e2c093b259d30 |
+[trinity10] out: +------------------------------------------------------------------+
+[trinity10] out: 
+
+[trinity10] run: docker network ls
+[trinity10] out: NETWORK ID          NAME                TYPE
+[trinity10] out: b1302457a47c        none                null                
+[trinity10] out: 6df57a08bc98        host                host                
+[trinity10] out: 792af369e55c        bridge              bridge              
+[trinity10] out: c0c463bf0fa6        anetab              calico              
+[trinity10] out: b517afa66f5a        anetsolr            calico              
+[trinity10] out: 
+
+[trinity10] run: ./calicoctl profile show
+[trinity10] out: +------------------------------------------------------------------+
+[trinity10] out: |                               Name                               |
+[trinity10] out: +------------------------------------------------------------------+
+[trinity10] out: | b517afa66f5ae2f12792474ea2b3247844428c9da746237942e0b3bb1111e6f4 |
+[trinity10] out: | c0c463bf0fa6f0bc56e55a654172ab289979b23a60ab3dddc98e2c093b259d30 |
+[trinity10] out: +------------------------------------------------------------------+
+[trinity10] out: 
+
+checking b517afa66f5a for +------------------------------------------------------------------+
+checking b517afa66f5a for |                               Name                               |
+checking b517afa66f5a for +------------------------------------------------------------------+
+checking b517afa66f5a for | b517afa66f5ae2f12792474ea2b3247844428c9da746237942e0b3bb1111e6f4 |
+[trinity10] run: ./calicoctl profile  c0c463bf0fa6f0bc56e55a654172ab289979b23a60ab3dddc98e2c093b259d30 rule add inbound allow icmp
+[trinity10] run: ./calicoctl profile  b517afa66f5ae2f12792474ea2b3247844428c9da746237942e0b3bb1111e6f4 rule add inbound allow icmp
+[trinity10] run: ./calicoctl profile b517afa66f5ae2f12792474ea2b3247844428c9da746237942e0b3bb1111e6f4 rule add inbound allow tcp from ports 8983
+
+Done.
 ```
 
-===delme
-Before I can ping them I need to allow it in the profile:
-
-```
-mak@trinity10:~$ docker network ls
-NETWORK ID          NAME                TYPE
-a4de27be0d6d        anetab              calico              
-fe7701ef4f78        asolrnet            calico              
-
-mak@trinity10:~$ ./calicoctl profile show
-+------------------------------------------------------------------+
-|                               Name                               |
-+------------------------------------------------------------------+
-| a4de27be0d6d709d7d223f38cdaf9dd0807f0d3c7b4a375c07ec158c8b2ca02f |
-| fe7701ef4f783c835fa93f1cb47108ab4db22d610a4ead0525345490cd6a61a8 |
-+------------------------------------------------------------------+
-```
-
-I'll allow inbound ICMP to both:
-
-```
-mak@trinity10:~$ for profile in \
-  a4de27be0d6d709d7d223f38cdaf9dd0807f0d3c7b4a375c07ec158c8b2ca02f \
-  fe7701ef4f783c835fa93f1cb47108ab4db22d610a4ead0525345490cd6a61a8; do
-  ./calicoctl profile $profile rule add inbound --at=1 allow icmp
-done
-```
-
-There is some scope for improvement in my fabfile here -- I should be able to
-configure this when I create the network.
-
-```
-mak@trinity10:~$ profile=fe7701ef4f783c835fa93f1cb47108ab4db22d610a4ead0525345490cd6a61a8
-mak@trinity10:~$ ./calicoctl profile $profile rule add inbound allow --at=1 tcp to ports 8983
-```
-===delme
-
-
-Next we need to create an address pool.
+Next we need to create an address pool for Calico to assign to the containers.
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab calicoctl_pool
@@ -734,17 +743,36 @@ So, next, BGP routing so I can talk to them from my machine.
 The command has changed slightly:
 
 ```
-mak@trinity10:~$ ./calicoctl bgp peer add 192.168.77.1 as 64511
-mak@trinity10:~$ 
+(venv)crab:docker-calico-fabric mak$ fab add_bgp_peer
+[trinity10] Executing task 'add_bgp_peer'
+[trinity10] run: ./calicoctl bgp peer add 192.168.77.1 as 64511
+
+Done.
 ```
 
 On the Mikrotik side I used the same config as before,
-and I see routes for the containers.
+I see routes for the containers, and I can ping from my laptop:
+
+```
+(venv)crab:docker-calico-fabric mak$ ping -c 1 192.168.89.1
+PING 192.168.89.1 (192.168.89.1): 56 data bytes
+64 bytes from 192.168.89.1: icmp_seq=0 ttl=61 time=0.744 ms
+
+--- 192.168.89.1 ping statistics ---
+1 packets transmitted, 1 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 0.744/0.744/0.744/0.000 ms
+mak@crab 504 ~ $ ping -c 1 192.168.89.2
+PING 192.168.89.2 (192.168.89.2): 56 data bytes
+64 bytes from 192.168.89.2: icmp_seq=0 ttl=61 time=0.882 ms
+
+--- 192.168.89.2 ping statistics ---
+1 packets transmitted, 1 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 0.882/0.882/0.882/0.000 ms
+```
 
 
 Solr
 ----
-
 
 Next, I want to try and run a Solr cluster.
 That's a work in progress, but let's see how far we get.
@@ -855,16 +883,8 @@ Disconnecting from trinity20... done.
 
 Yes, it can.
 
-TODO: and from outside
 
-
-```
-fab create_test_zookeeper
-fab create_test_solr1
-fab create_test_solr2
-```
-
-Then go to http://192.
+http://192.168.89.4:8983
 
 
 
