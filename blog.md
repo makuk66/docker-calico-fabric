@@ -552,10 +552,10 @@ Disconnecting from trinity10... done.
 
 At last, we're ready to try some containers.
 
-First container A, on trinity10:
+First container "alpha", on trinity10:
 
 ```
-(venv)crab:docker-calico-fabric mak$ fab create_test_containerA
+(venv)crab:docker-calico-fabric mak$ fab create_test_alpha
 [trinity10] Executing task 'create_test_containerA'
 [trinity10] run: docker pull busybox:latest
 [trinity10] out: latest: Pulling from busybox
@@ -624,12 +624,12 @@ Notice how that `ip addr list` there crashed busybox.
 I've seen a [bug report at calico](https://github.com/Metaswitch/calico-docker/issues/4) about that, which was closed as an upstream bug.
 I [filed one there](https://bugs.busybox.net/show_bug.cgi?id=8231).
 
-Container A is running on 192.168.89.1.
+Container "alpha" is running on 192.168.89.1.
 
-Next, container B, on trinity20:
+Next, container "beta", on trinity20:
 
 ```
-(venv)crab:docker-calico-fabric mak$ fab create_test_containerB
+(venv)crab:docker-calico-fabric mak$ fab create_test_beta
 [trinity20] Executing task 'create_test_containerB'
 [trinity20] run: docker pull busybox:latest
 [trinity20] out: latest: Pulling from busybox
