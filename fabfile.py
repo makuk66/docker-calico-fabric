@@ -33,7 +33,7 @@ env.consul_host = "trinity10"
 env.etcd_cluster_token = "etcd-cluster-2123"
 env.user = "mak"
 
-CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v0.5.0/calicoctl"
+CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v0.5.2/calicoctl"
 CONSUL_URL = "https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip"
 
 SOLR_IMAGE='makuk66/docker-calico-devices:latest'
