@@ -38,8 +38,7 @@ CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v
 DOCKER_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/docker".format(CALICO_VERSION)
 CONSUL_URL = "https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip"
 
-SOLR_IMAGE = 'makuk66/docker-calico-devices:latest'
-#SOLR_IMAGE='makuk66/docker-solr'
+SOLR_IMAGE = 'makuk66/docker-solr:5.2-no-expose'
 ZOOKEEPER_IMAGE = 'jplock/zookeeper'
 ZOOKEEPER_NAME = 'zookeeper3'
 

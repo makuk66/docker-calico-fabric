@@ -1,7 +1,7 @@
 
 Since my last [blog post](http://www.greenhills.co.uk/2015/05/22/projectcalico-experiments.html) and [Project Calico](http://www.projectcalico.org/),
-Docker gained a new plugin architecture for networking in 1.7/1.8.
-In this blog post I explore how that changes things.
+Docker gained a new plugin architecture for networking in 1.7/1.8, and [Calico-docker 0.5.2](https://github.com/Metaswitch/calico-docker/releases/tag/v0.5.2) was released to use that.
+In this blog post I explore how that changes things compared to last time.
 I used [this Vagrant example](https://github.com/Metaswitch/calico-ubuntu-vagrant) as a guide, but install to bare metal, similar to my previous post. I made some optimisations:
 
 - I automated my cluster OS re-installation, so I can easily
@@ -12,7 +12,8 @@ and hit return to start the automatic installation. Which is a big help, but if 
 to test this regularly I'll swtich to some resettable VMs.
 
 - I use [Fabric](http://www.fabfile.org) to automate the
-docker/calico installation.
+docker/calico installation. This way I can run commands directly from my laptop,
+and introduce some scripting to determine dynamic values.
 
 So let's get started.
 You can follow along in [the fabfile](https://github.com/makuk66/docker-calico-fabric/blob/master/fabfile.py) if you want to see code.
@@ -22,25 +23,20 @@ If you see "..." I've discarded output noise.
 Checking out the repo:
 
 ```
-crab:makuk66 mak$ pwd
-/Users/mak/github/makuk66
+PS1='crab$ '
 
-crab:makuk66 mak$ git clone git@github.com:makuk66/docker-calico-fabric.git
+crab$ git clone git@github.com:makuk66/docker-calico-fabric.git
 Cloning into 'docker-calico-fabric'...
 remote: Counting objects: 5, done.
 remote: Total 5 (delta 0), reused 0 (delta 0), pack-reused 5
 Receiving objects: 100% (5/5), 4.61 KiB | 0 bytes/s, done.
 Checking connectivity... done.
 
-crab:makuk66 mak$ cd docker-calico-fabric
-mak@crab 503 docker-calico-fabric [master] $ git log
-commit 61ff0e442d57d9ba1d95b316209982a0062c0a96
-Author: Martijn Koster <mak-github@greenhills.co.uk>
-Date:   Thu Jun 25 14:15:25 2015 +0100
+crab$ cd docker-calico-fabric
+crab$ git rev-parse HEAD
+ac454061d4ed428f8ad136e9ba87326ca3db2c3c
 
-    Initial commit
-
-crab:docker-calico-fabric mak$ cat README.md 
+crab$ cat README.md 
 # docker-calico-fabric
 Deploy Docker with Calico to my test cluster
 
@@ -55,12 +51,16 @@ Based on https://github.com/Metaswitch/calico-ubuntu-vagrant
 Setting up python:
 
 ```
-crab:docker-calico-fabric mak$ virtualenv venv
+crab$ virtualenv venv
 New python executable in venv/bin/python2.7
 Also creating executable in venv/bin/python
 Installing setuptools, pip...done.
-crab:docker-calico-fabric mak$ source venv/bin/activate
-(venv)crab:docker-calico-fabric mak$ pip install -r requirements.txt
+
+crab$ source venv/bin/activate
+
+crab 499 docker-calico-fabric [master] $ PS1='crab$ '
+
+crab$ pip install -r requirements.txt
 ...
 Successfully installed ecdsa-0.13 fabric-1.10.2 jinja2-2.7.3 markupsafe-0.23 paramiko-1.15.2 pycrypto-2.6.1
 ```
@@ -68,7 +68,7 @@ Successfully installed ecdsa-0.13 fabric-1.10.2 jinja2-2.7.3 markupsafe-0.23 par
 Checking fabric on my laptop can talk to the cluster:
 
 ```
-(venv)crab:docker-calico-fabric mak$ fab info
+crab$ fab info
 [trinity10] Executing task 'info'
 [trinity10] run: cat /etc/lsb-release
 [trinity10] out: DISTRIB_ID=Ubuntu
@@ -103,7 +103,7 @@ Disconnecting from trinity20... done.
 Prepping ssh and sudo:
 
 ```
-(venv)crab:docker-calico-fabric mak$ fab copy_ssh_key setup_sudoers
+crab$ fab copy_ssh_key setup_sudoers
 [trinity10] Executing task 'copy_ssh_key'
 [trinity10] put: /Users/mak/.ssh/id_dsa.pub -> tmpkey.pem
 [trinity10] sudo: mkdir -p ~mak/.ssh
@@ -175,10 +175,12 @@ Disconnecting from trinity10... done.
 Disconnecting from trinity20... done.
 ```
 
-Installing OS pre-requisites. I only show the output for trinity10; the same happens on trinity20/trinity30:
+Configure the OS kernel modules for IPv6 and IP sets, switch on forwarding,
+and add some utility packages we'll need.
+I only show the output for trinity10; the same happens on trinity20/trinity30:
 
 ```
-(venv)crab:docker-calico-fabric mak$ fab install_prerequisites
+crab$ fab install_prerequisites
 [trinity10] Executing task 'install_prerequisites'
 [trinity10] sudo: modprobe ip6_tables
 [trinity10] sudo: echo 'ip6_tables' >> "$(echo /etc/modules)"
@@ -196,10 +198,10 @@ Installing OS pre-requisites. I only show the output for trinity10; the same hap
 Now we're getting to the fun bit.
 I install the experimental docker, as recommeded by Docker Inc., to make sure it does the appropriate package things.
 Then I replace the docker command with the one Calico's example uses, for compatibility.
-In due course I expect I can just install the official docker version 1.8 or later.
+Once 1.8 is released I expect that won't be needed.
 
 ```
-(venv)crab:docker-calico-fabric mak$ fab install_experimental_docker
+crab$ fab install_experimental_docker
 [trinity10] Executing task 'install_experimental_docker'
 [trinity10] run: docker version | grep '^Server version: ' | sed 's/^.* //'
 [trinity10] out: /bin/bash: docker: command not found
@@ -276,7 +278,7 @@ This takes a while.
 You should really use a local registry for the nodes to share, but that's for another day.
 
 ```
-(venv)crab:docker-calico-fabric mak$ fab pull_docker_images
+crab$ fab pull_docker_images
 [trinity10] Executing task 'pull_docker_images'
 [trinity10] run: docker pull makuk66/docker-calico-devices:latest
 ...
@@ -285,11 +287,8 @@ You should really use a local registry for the nodes to share, but that's for an
 [trinity10] run: docker pull busybox:latest
 ...
 [trinity10] run: docker pull ubuntu:latest
-
+...
 ```
-
-By the way, that `makuk66/docker-calico-devices` image is a temporary hack;
-it should be `makuk66/docker-solr` once I figure out a [problem with its EXPOSE](https://github.com/Metaswitch/calico-docker/issues/341).
 
 
 Next, get Calico. This installs as `calicoctl` in the home directory.
@@ -394,7 +393,8 @@ We can check the cluster is happy:
 Done.
 ```
 
-Now all the bits are in place, and we can start the Calico containers:
+Now all the bits are in place, and we can start the Calico containers.
+We pass the specific IP address for it to use; in a future version that should not be required.
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab start_calico_containers
@@ -435,7 +435,7 @@ creating and starting calico-node
 Done.
 ```
 
-Next we'll create two test networks, 'anetab' and 'anetsolr':
+Next we'll create two test networks, 'netalphabeta' and 'netsolr':
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_networks
@@ -458,7 +458,11 @@ Next we'll create two test networks, 'anetab' and 'anetsolr':
 [trinity10] out: 
 ```
 
-and configure profiles (think AWS security groups or router iptables) for them:
+and configure Calico's profiles (think AWS security groups or router iptables) for them.
+This syntax is new too; nice.
+
+The fabric code figures out the profile name for the specific network.
+There might be a better way to do this.
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_network_profiles
@@ -552,7 +556,10 @@ Disconnecting from trinity10... done.
 
 At last, we're ready to try some containers.
 
-First container "alpha", on trinity10:
+First container "alpha", on trinity10, and inspect its network configuration from docker,
+and from within the container.
+Note the network name in the `publish-service` argument in the `docker run`.
+And note the `cali0` device that has the IP address for this container, and has the default route.
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_test_alpha
@@ -624,9 +631,9 @@ Notice how that `ip addr list` there crashed busybox.
 I've seen a [bug report at calico](https://github.com/Metaswitch/calico-docker/issues/4) about that, which was closed as an upstream bug.
 I [filed one there](https://bugs.busybox.net/show_bug.cgi?id=8231).
 
-Container "alpha" is running on 192.168.89.1.
+So now container "alpha" is using address 192.168.89.1, and running on trinity10.
 
-Next, container "beta", on trinity20:
+Next, container "beta", on trinity20, in the same way:
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_test_beta
@@ -694,9 +701,9 @@ Warning: run() received nonzero return code 139 while executing 'docker exec -i 
 [trinity20] out: 
 ```
 
-Container B is running 192.168.89.2.
+So container "beta" is using address 192.168.89.2 and running on trinity20.
 
-So... can they talk to eachother?
+The big question is -- can they talk to eachother?
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab pingAB
@@ -774,10 +781,16 @@ round-trip min/avg/max/stddev = 0.882/0.882/0.882/0.000 ms
 Solr
 ----
 
-Next, I want to try and run a Solr cluster.
-That's a work in progress, but let's see how far we get.
+Pinging is all very well, but let's try a real application: Solr.
 
-First zookeeper. I'll just put it on single container for now:
+I have a [makuk66/docker-solr](https://github.com/makuk66/docker-solr) image on the
+Docker registry (60 stars, whoo!). But I can't use that as-is because it has an
+EXPOSE that causes a problem in libnetwork. See [calico-docker issue 341](https://github.com/Metaswitch/calico-docker/issues/341)
+and [libnetwork issue 401](https://github.com/docker/libnetwork/issues/401).
+So as a temporary hack I've created another image without that EXPOSE: `makuk66/docker-solr:5.2-no-expose`.
+
+
+First zookeeper. I'll just put it on single container:
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_test_zookeeper
@@ -801,7 +814,7 @@ Done.
 Disconnecting from trinity10... done.
 ```
 
-Next, Solr on a different machine:
+Next, a Solr container on a different machine, configured to talk to ZooKeeper:
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_test_solr1
@@ -829,7 +842,7 @@ Next, Solr on a different machine:
 
 ```
 
-and a second one:
+and a second Solr container on a different machine:
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_test_solr2
@@ -851,7 +864,7 @@ and a second one:
 [trinity20] out: 
 ```
 
-and let's see if a client can talk to them:
+and let's see if a web client in a container can talk to them:
 
 ```
 (venv)crab:docker-calico-fabric mak$ fab create_test_solrclient
@@ -883,14 +896,30 @@ Disconnecting from trinity20... done.
 
 Yes, it can.
 
+Let's load some data into a collection:
+
+```
+fab solr_data
+```
+
+That seemed to work.
+
+So I should be able to get to a Solr admin interface from my laptop... and indeed I can:
+
 
 http://192.168.89.4:8983
 
 
+Conclusion
+----------
 
+Calico and Docker's libnetwork work -- nice!
 
+Kudos to the Calico folks: quite a lot seems to have changed in a short time, and I'm looking forward to further improvements.
+The authors and community on `#calico` have been responsive and helpful -- thanks!
 
-
+I still have many questions about ongoing management of such networks, and their interaction with orchestration tools.
+It's certainly exciting times...
 
 
 
