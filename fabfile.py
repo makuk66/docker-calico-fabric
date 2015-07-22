@@ -47,6 +47,8 @@ UBUNTU_IMAGE = 'ubuntu:latest'
 CALICO_IMAGE = "calico/node:v{}".format(CALICO_VERSION)
 ETCD_IMAGE = "quay.io/coreos/etcd:v2.0.11"
 
+SOLR_COLLECTION = "books"
+
 NET_ALPHA_BETA = "netalphabeta"
 NET_SOLR = "netsolr"
 
@@ -196,7 +198,7 @@ def run_etcd():
     run("docker run -d "
         "-p {etcd_client_port}:{etcd_client_port} -p {etcd_peer_port}:{etcd_peer_port} "
         "--name quay.io-coreos-etcd "
-        "quay.io/coreos/etcd "
+        "{etcd_image} "
         "--name {my_name} "
         "--advertise-client-urls http://{ipv4_address}:{etcd_client_port} "
         "--listen-client-urls http://0.0.0.0:{etcd_client_port} "
@@ -206,6 +208,7 @@ def run_etcd():
         "--initial-cluster {initial_cluster} "
         "--initial-cluster-state new".format(ipv4_address=ipv4_address,
                                              my_name=my_name,
+                                             etcd_image=ETCD_IMAGE,
                                              etcd_cluster_token=env.etcd_cluster_token,
                                              initial_cluster=initial_cluster,
                                              etcd_peer_port=env.etcd_peer_port,
@@ -261,7 +264,6 @@ def get_profile_for_network(wanted_name):
     # the network ID is a short one like 6df57a08bc98. find the long version in the profiles
     profiles = run("./calicoctl profile show")
     for profile_line in profiles.splitlines():
-        print "checking {} for {}".format(found_network_id, profile_line)
         match = re.search(r'\s({}\S+)'.format(found_network_id), profile_line)
         if match is not None:
             return match.group(1)
@@ -348,16 +350,16 @@ def inspect_container(container_name_or_id=''):
 def ping_test_containers():
     """ see if containers A and B can ping eachother """
     alpha_name = 'c-' + TEST_ALPHA
-    beta_name = 'c-B' + TEST_BETA
+    beta_name = 'c-' + TEST_BETA
     alpha_address = None
     beta_address = None
-    with settings(host_string=get_docker_host_for_role('container_alpha_dockerhost')):
+    with settings(host_string=get_docker_host_for_role('alpha_dockerhost')):
         alpha_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + alpha_name)
-    with settings(host_string=get_docker_host_for_role('container_beta_dockerhost')):
+    with settings(host_string=get_docker_host_for_role('beta_dockerhost')):
         beta_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + beta_name)
-    with settings(host_string=get_docker_host_for_role('container_alpha_dockerhost')):
+    with settings(host_string=get_docker_host_for_role('alpha_dockerhost')):
         run("docker exec -i {} ping -c 1 {}".format(alpha_name, beta_address))
-    with settings(host_string=get_docker_host_for_role('container_beta_dockerhost')):
+    with settings(host_string=get_docker_host_for_role('beta_dockerhost')):
         run("docker exec -i {} ping -c 1 {}".format(beta_name, alpha_address))
 
 @roles('zookeeperdockerhost')
@@ -412,16 +414,22 @@ def create_test_solrclient():
 
     solr2_ip_address = None
     with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
-        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}'' solr2")
+        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' solr2")
     name = 'solrclient-' + id_generator()
     run("docker run --publish-service {}.{}.calico --name {} -i {} "
         "curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr2_ip_address))
 
 @roles('solr1dockerhost')
+def solr_collection():
+    """ create collection in solr """
+    run("docker exec -i -t solr1 /opt/solr/bin/solr "
+        "create_collection -c {} -shards 2 -p 8983".format(SOLR_COLLECTION))
+
+@roles('solr1dockerhost')
 def solr_data():
     """ load test data into solr """
-    run("docker exec -i -t solr1 /opt/solr/bin/solr "
-        "create_collection c collection1 -shards 2 -p 8983")
+    run("docker exec -it --user=solr solr1 "
+        "bin/post -c {} /opt/solr/example/exampledocs/books.json".format(SOLR_COLLECTION))
 
 @roles('docker_cli')
 def add_bgp_peer():
@@ -435,6 +443,7 @@ def docker_ps():
 
 def install():
     """ install the cluster """
+    # I've not run this in a single go; but it illustrates the order
     execute(info)
     execute(copy_ssh_key)
     execute(setup_sudoers)
@@ -462,4 +471,5 @@ def install():
     execute(create_test_solr2)
 
     execute(create_test_solrclient)
+    execute(solr_collection)
     execute(solr_data)
