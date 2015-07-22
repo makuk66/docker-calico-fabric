@@ -48,10 +48,8 @@ UBUNTU_IMAGE = 'ubuntu:latest'
 CALICO_IMAGE = "calico/node:v{}".format(CALICO_VERSION)
 ETCD_IMAGE = "quay.io/coreos/etcd:v2.0.11"
 
-# Use "a" prefix per https://github.com/docker/libnetwork/issues/401 workaround
-# not that that actually seems to work
-NET_AB = "anetab"
-NET_SOLR = "anetsolr"
+NET_ALPHA_BETA = "netalphabeta"
+NET_SOLR = "netsolr"
 
 TEST_ALPHA = "alpha"
 TEST_BETA = "beta"
@@ -244,7 +242,7 @@ def start_calico_containers():
 @roles('docker_cli')
 def create_networks():
     """ create two example networks """
-    run("docker network create --driver=calico " + NET_AB)
+    run("docker network create --driver=calico " + NET_ALPHA_BETA)
     run("docker network create --driver=calico " + NET_SOLR)
     run("docker network ls")
 
@@ -274,7 +272,7 @@ def get_profile_for_network(wanted_name):
 @roles('docker_cli')
 def configure_network_profiles():
     """ configure network profiles """
-    net_ab_profile = get_profile_for_network(NET_AB)
+    net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
     run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
 
     net_solr_profile = get_profile_for_network(NET_SOLR)
@@ -324,7 +322,7 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
 def create_test_container(name='', image=BUSYBOX_IMAGE):
     """ create a test container """
     service_name = 'srv{}'.format(name)
-    full_service_name = '{}.{}.calico'.format(service_name, NET_AB)
+    full_service_name = '{}.{}.calico'.format(service_name, NET_ALPHA_BETA)
     container_name = 'c-' + name
     container_id = run("docker pull {}".format(image), pty=False)
     container_id = run("docker run --publish-service {} --name {} -tid {}".format(
