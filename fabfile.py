@@ -405,7 +405,9 @@ def solr_data():
 @roles('docker_cli')
 def add_bgp_peer():
     """ configure BGP peer """
-    run("./calicoctl bgp peer add 192.168.77.1 as 64511")
+    etcd_address = env.cluster_address[env.etcd_host]
+    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
+        run("./calicoctl bgp peer add 192.168.77.1 as 64511")
 
 @roles('all')
 def docker_ps():
