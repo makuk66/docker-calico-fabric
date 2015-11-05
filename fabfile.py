@@ -211,8 +211,8 @@ def create_networks():
     """ create two example networks """
     etcd_address = env.cluster_address[env.etcd_host]
     with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
-        run("docker network create --driver=calico " + NET_ALPHA_BETA)
-        run("docker network create --driver=calico " + NET_SOLR)
+        run("docker network create --driver=calico --subnet 192.168.91.0/24 " + NET_ALPHA_BETA)
+        run("docker network create --driver=calico --subnet 192.168.89.0/24 " + NET_SOLR)
         run("docker network ls")
 
 def get_profile_for_network(wanted_name):
@@ -248,17 +248,6 @@ def configure_network_profiles():
         net_solr_profile = get_profile_for_network(NET_SOLR)
         run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
         run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
-
-@roles('docker_cli')
-def calicoctl_pool():
-    """ configure the Calico address pool """
-    etcd_address = env.cluster_address[env.etcd_host]
-    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
-        run("./calicoctl pool show")
-        run("./calicoctl pool add 192.168.89.0/24")
-        run("./calicoctl pool remove 192.168.0.0/16")
-        run("./calicoctl pool add 192.168.89.0/24")
-        run("./calicoctl pool show")
 
 @roles('alpha_dockerhost')
 def create_test_container_alpha():
