@@ -6,21 +6,23 @@ and deploy solr.
 
 Work in progress.
 
+Based on http://www.projectcalico.org/docker-libnetwork-is-almost-here-and-calico-is-ready/
+
 """
 from fabric.api import env, run, sudo, execute, settings, roles
 from fabric.contrib.files import exists, append, put, upload_template
 from fabric.network import disconnect_all
-import time, os, re, string, random
+import time, os, re, string, random, StringIO
 
 # define cluster IPs
-env.cluster_addresss = {
+env.cluster_address = {
     'trinity10': '192.168.77.10',
     'trinity20': '192.168.77.20',
     'trinity30': '192.168.77.30'
 }
 
 env.roledefs = {
-    'all': sorted(env.cluster_addresss.keys()),
+    'all': sorted(env.cluster_address.keys()),
     'docker_cli': ['trinity10'],
     'alpha_dockerhost': ['trinity10'],
     'beta_dockerhost': ['trinity20'],
@@ -29,14 +31,13 @@ env.roledefs = {
     'solr2dockerhost': ['trinity20'],
     'solrclientdockerhost': ['trinity30'],
 }
-env.consul_host = "trinity10"
+env.etcd_host = "trinity10"
 env.etcd_cluster_token = "etcd-cluster-2123"
 env.user = "mak"
 
-CALICO_VERSION = "0.5.2"
+CALICO_VERSION = "0.10.0"
 CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/calicoctl".format(CALICO_VERSION)
 DOCKER_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/docker".format(CALICO_VERSION)
-CONSUL_URL = "https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip"
 
 SOLR_IMAGE = 'makuk66/docker-solr:5.2-no-expose'
 ZOOKEEPER_IMAGE = 'jplock/zookeeper'
@@ -45,7 +46,7 @@ ZOOKEEPER_NAME = 'zookeeper3'
 BUSYBOX_IMAGE = 'busybox:latest'
 UBUNTU_IMAGE = 'ubuntu:latest'
 CALICO_IMAGE = "calico/node:v{}".format(CALICO_VERSION)
-ETCD_IMAGE = "quay.io/coreos/etcd:v2.0.11"
+ETCD_URL="https://github.com/coreos/etcd/releases/download/v2.2.1/etcd-v2.2.1-linux-amd64.tar.gz"
 
 SOLR_COLLECTION = "books"
 
@@ -55,7 +56,7 @@ NET_SOLR = "netsolr"
 TEST_ALPHA = "alpha"
 TEST_BETA = "beta"
 
-env.etcd_client_port = 4001
+env.etcd_client_port = 2379
 env.etcd_peer_port = 7001
 
 TEMPLATES = 'templates'
@@ -72,8 +73,8 @@ def info():
 @roles('all')
 def ping():
     """ Ping all the hosts in the cluster from this host """
-    for name in sorted(env.cluster_addresss.keys()):
-        run("ping -c 3 {}".format(env.cluster_addresss[name]))
+    for name in sorted(env.cluster_address.keys()):
+        run("ping -c 3 {}".format(env.cluster_address[name]))
 
 @roles('all')
 def copy_ssh_key(ssh_pub_key="~/.ssh/id_dsa.pub", user=env.user):
@@ -93,28 +94,17 @@ def setup_sudoers():
     append("/etc/sudoers", "{0}  ALL=(ALL) NOPASSWD:ALL".format(env.user), use_sudo=True)
 
 @roles('all')
-def install_experimental_docker():
-    """ Execute the exerimental docker recipe, then replace the binary with
-        a specific Calico version
-    """
-    current_docker_version = run("docker version | grep '^Server version: ' | sed 's/^.* //'")
-    if "command not found" in current_docker_version:
-        sudo('wget -qO- https://experimental.docker.com/ | sh')
-        sudo('usermod -aG docker {}'.format(env.user))
-        disconnect_all()
-    # per https://github.com/Metaswitch/calico-docker/releases/tag/v0.5.2 release notes,
-    # use a pre-release version of docker
-    filename = "docker"
-    run("rm -f {}".format(filename)) # remove old downloads
-    run("wget {} > /dev/null 2>&1".format(DOCKER_URL))
-    run("chmod a+x {}".format(filename))
-    if exists('/etc/init/docker.conf'):
-        sudo("stop docker || echo oh well")
-    docker_location = run("which docker||true")
-    if docker_location == "":
-        docker_location = '/usr/bin/docker'
-    sudo("mv {} {}".format(filename, docker_location))
-    sudo("start docker")
+def install_docker():
+    # per http://docs.docker.com/engine/installation/ubuntulinux/
+    sudo("apt-key adv --keyserver hkp://pgp.mit.edu:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D")
+
+    distrib_codename = run("grep DISTRIB_CODENAME /etc/lsb-release |sed 's/.*=//'")
+    put(StringIO.StringIO('deb https://apt.dockerproject.org/repo ubuntu-{} main\n'.format(distrib_codename)),
+        '/etc/apt/sources.list.d/docker.list', use_sudo=True)
+    sudo('DEBIAN_FRONTEND=noninteractive apt-get -q update')
+    sudo('apt-cache policy docker-engine')
+    sudo('apt-get --yes install docker-engine')
+    sudo('sudo service docker start')
     time.sleep(1)
     run("docker version")
 
@@ -137,14 +127,11 @@ def install_prerequisites():
 
 @roles('all')
 def install_calico():
-    """ Install Calico, inspired by https://github.com/Metaswitch/calico-ubuntu-vagrant """
+    """ Install Calico, inspired by http://www.projectcalico.org/docker-libnetwork-is-almost-here-and-calico-is-ready/ """
     # TODO: we want to install Calico somewhere more suitable
     if not exists("calicoctl"):
         run("wget -nv {}".format(CALICOCTL_URL))
         run("chmod +x calicoctl")
-
-    sudo("docker pull {}".format(CALICO_IMAGE), pty=False)
-    sudo("docker pull {}".format(ETCD_IMAGE), pty=False)
 
 def get_addressv4_address():
     """ utility method to return the ip address for the current host """
@@ -155,65 +142,35 @@ def get_addressv4_address():
     return ipv4_address
 
 @roles('all')
-def install_consul():
-    """ install Consul """
-    if env.host == env.consul_host and not exists("/usr/bin/consul"):
-        run("rm -f consul.zip consul")
-        run("curl -L --silent {} -o consul.zip".format(CONSUL_URL))
-        run("unzip consul.zip")
-        run("chmod +x consul")
-        sudo("mv consul /usr/bin/consul")
-        run("rm -f consul.zip")
-
+def install_etcd():
+    """ install etcd """
+    if env.host == env.etcd_host:
+        etc_tgz = ETCD_URL.rpartition('/')[2]
+        etc_dir = etc_tgz.replace('.tar.gz', '')
+        if not exists(etc_tgz):
+            run("wget -nv {}".format(ETCD_URL))
+        if not exists(etc_dir):
+            run("tar xvzf {}".format(etc_tgz))
+        etcd_home = run("cd {}; /bin/pwd".format(etc_dir))
         ipv4_address = get_addressv4_address()
         ctx = {
-            "consul_dir": '/usr/bin',
-            "ip_address": ipv4_address
+            "etcd_home": etcd_home,
+            "advertise_client_urls": 'http://{}:2379'.format(ipv4_address),
+            "listen_client_urls": 'http://0.0.0.0:2379'
         }
-        upload_template(filename='consul.conf', destination='/etc/init/consul.conf',
+        upload_template(filename='etcd.conf', destination='/etc/init/etcd.conf',
                         template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
 
-        sudo("service consul start")
+        sudo("service etcd start")
         time.sleep(2)
 
-    consul_address = env.cluster_addresss[env.consul_host]
+    etcd_address = env.cluster_address[env.etcd_host]
     append("/etc/default/docker",
-           'DOCKER_OPTS="--kv-store=consul:{}:8500"'.format(consul_address),
+           'DOCKER_OPTS="--cluster-store=etcd://{}:2379"'.format(etcd_address),
            use_sudo=True)
 
     sudo("service docker restart")
     time.sleep(5)
-
-@roles('all')
-def run_etcd():
-    """ Run etcd """
-    my_name = "etcd-{}".format(env.host)
-    initial_cluster_members = []
-    for name in sorted(env.cluster_addresss.keys()):
-        ipv4_address = env.cluster_addresss[name]
-        initial_cluster_members.append("etcd-{}=http://{}:7001".format(name, ipv4_address))
-    initial_cluster = ",".join(initial_cluster_members)
-    ipv4_address = get_addressv4_address()
-    run('docker pull {}'.format(ETCD_IMAGE), pty=False)
-    run("docker run -d "
-        "-p {etcd_client_port}:{etcd_client_port} -p {etcd_peer_port}:{etcd_peer_port} "
-        "--name quay.io-coreos-etcd "
-        "{etcd_image} "
-        "--name {my_name} "
-        "--advertise-client-urls http://{ipv4_address}:{etcd_client_port} "
-        "--listen-client-urls http://0.0.0.0:{etcd_client_port} "
-        "--initial-advertise-peer-urls http://{ipv4_address}:{etcd_peer_port} "
-        "--listen-peer-urls http://0.0.0.0:{etcd_peer_port} "
-        "--initial-cluster-token {etcd_cluster_token} "
-        "--initial-cluster {initial_cluster} "
-        "--initial-cluster-state new".format(ipv4_address=ipv4_address,
-                                             my_name=my_name,
-                                             etcd_image=ETCD_IMAGE,
-                                             etcd_cluster_token=env.etcd_cluster_token,
-                                             initial_cluster=initial_cluster,
-                                             etcd_peer_port=env.etcd_peer_port,
-                                             etcd_client_port=env.etcd_client_port))
-    time.sleep(2)
 
 @roles('all')
 def docker_clean():
@@ -223,8 +180,9 @@ def docker_clean():
 @roles('all')
 def check_etcd():
     """ check etcd """
-    run("curl -L http://localhost:4001/version")
-    run("curl -L http://localhost:4001/v2/machines")
+    etcd_address = env.cluster_address[env.etcd_host]
+    run("curl -L http://{}:2379/version".format(etcd_address))
+    run("curl -L http://{}:2379/v2/machines".format(etcd_address))
 
 @roles('all')
 def start_calico_containers():
@@ -233,7 +191,8 @@ def start_calico_containers():
     if existing == "":
         ipv4_address = get_addressv4_address()
         print "creating and starting calico-node"
-        sudo("./calicoctl node --ip={}".format(ipv4_address))
+        etcd_address = env.cluster_address[env.etcd_host]
+        sudo("ETCD_AUTHORITY={}:2379 ./calicoctl node --libnetwork --ip={}".format(etcd_address, ipv4_address))
     elif "Up" in existing:
         print "calico-node already running"
         return
@@ -373,8 +332,7 @@ def create_test_zookeeper():
 @roles('all')
 def pull_docker_images():
     """ pull images we'll use """
-    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE,
-                  ETCD_IMAGE, CALICO_IMAGE]:
+    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE]:
         run("docker pull {}".format(image), pty=False)
 
 @roles('solr1dockerhost')
@@ -448,12 +406,11 @@ def install():
     execute(copy_ssh_key)
     execute(setup_sudoers)
     execute(install_prerequisites)
-    execute(install_experimental_docker)
+    execute(install_docker)
     execute(docker_version)
     execute(pull_docker_images)
     execute(install_calico)
-    execute(install_consul)
-    execute(run_etcd)
+    execute(install_etcd)
     execute(check_etcd)
     execute(start_calico_containers)
     execute(calicoctl_pool)
