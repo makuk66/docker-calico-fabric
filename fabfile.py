@@ -104,6 +104,7 @@ def install_docker():
     sudo('DEBIAN_FRONTEND=noninteractive apt-get -q update')
     sudo('apt-cache policy docker-engine')
     sudo('apt-get --yes install docker-engine')
+    sudo('useradd {} docker'.format(env.user))
     sudo('sudo service docker start')
     time.sleep(1)
     run("docker version")
