@@ -13,6 +13,7 @@ from fabric.api import env, run, sudo, execute, settings, roles
 from fabric.contrib.files import exists, append, put, upload_template
 from fabric.network import disconnect_all
 from fabric.decorators import parallel
+from fabric.context_managers import shell_env
 import time, os, re, string, random, StringIO
 
 # define cluster IPs
@@ -208,9 +209,11 @@ def start_calico_containers():
 @roles('docker_cli')
 def create_networks():
     """ create two example networks """
-    run("docker network create --driver=calico " + NET_ALPHA_BETA)
-    run("docker network create --driver=calico " + NET_SOLR)
-    run("docker network ls")
+    etcd_address = env.cluster_address[env.etcd_host]
+    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
+        run("docker network create --driver=calico " + NET_ALPHA_BETA)
+        run("docker network create --driver=calico " + NET_SOLR)
+        run("docker network ls")
 
 def get_profile_for_network(wanted_name):
     """ get the profile ID for a named network """
@@ -237,21 +240,25 @@ def get_profile_for_network(wanted_name):
 @roles('docker_cli')
 def configure_network_profiles():
     """ configure network profiles """
-    net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
-    run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
+    etcd_address = env.cluster_address[env.etcd_host]
+    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
+        net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
+        run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
 
-    net_solr_profile = get_profile_for_network(NET_SOLR)
-    run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
-    run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
+        net_solr_profile = get_profile_for_network(NET_SOLR)
+        run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
+        run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
 
 @roles('docker_cli')
 def calicoctl_pool():
     """ configure the Calico address pool """
-    run("./calicoctl pool show")
-    run("./calicoctl pool add 192.168.89.0/24")
-    run("./calicoctl pool remove 192.168.0.0/16")
-    run("./calicoctl pool add 192.168.89.0/24")
-    run("./calicoctl pool show")
+    etcd_address = env.cluster_address[env.etcd_host]
+    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
+        run("./calicoctl pool show")
+        run("./calicoctl pool add 192.168.89.0/24")
+        run("./calicoctl pool remove 192.168.0.0/16")
+        run("./calicoctl pool add 192.168.89.0/24")
+        run("./calicoctl pool show")
 
 @roles('alpha_dockerhost')
 def create_test_container_alpha():
