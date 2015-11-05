@@ -332,7 +332,8 @@ def create_test_zookeeper():
 @roles('all')
 def pull_docker_images():
     """ pull images we'll use """
-    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE]:
+    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE,
+        'calico/node:latest', 'calico/node-libnetwork:latest']:
         run("docker pull {}".format(image), pty=False)
 
 @roles('solr1dockerhost')
