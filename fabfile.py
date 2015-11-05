@@ -95,6 +95,9 @@ def setup_sudoers():
 
 @roles('all')
 def install_docker():
+    if exists('/usr/bin/docker'):
+        return
+
     # per http://docs.docker.com/engine/installation/ubuntulinux/
     sudo("apt-key adv --keyserver hkp://pgp.mit.edu:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D")
 
