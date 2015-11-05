@@ -293,12 +293,10 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
 
 def create_test_container(name='', image=BUSYBOX_IMAGE):
     """ create a test container """
-    service_name = 'srv{}'.format(name)
-    full_service_name = '{}.{}.calico'.format(service_name, NET_ALPHA_BETA)
     container_name = 'c-' + name
     container_id = run("docker pull {}".format(image), pty=False)
-    container_id = run("docker run --publish-service {} --name {} -tid {}".format(
-        full_service_name, container_name, image))
+    container_id = run("docker run --net {} --name {} -tid {}".format(
+        NET_ALPHA_BETA, container_name, image))
     inspect_container(container_id)
 
 def inspect_container(container_name_or_id=''):
