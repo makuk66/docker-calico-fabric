@@ -107,7 +107,7 @@ def install_docker():
     sudo('apt-get --yes --quiet update')
     sudo('apt-cache policy docker-engine')
     sudo('apt-get --yes --quiet install docker-engine')
-    sudo('useradd {} docker'.format(env.user))
+    sudo('adduser {} docker'.format(env.user))
     sudo('sudo service docker start')
     time.sleep(1)
     run("docker version")
