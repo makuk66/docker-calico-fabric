@@ -50,7 +50,7 @@ UBUNTU_IMAGE = 'ubuntu:latest'
 CALICO_IMAGE = "calico/node:v{}".format(CALICO_VERSION)
 ETCD_URL="https://github.com/coreos/etcd/releases/download/v2.2.1/etcd-v2.2.1-linux-amd64.tar.gz"
 
-SOLR_COLLECTION = "books"
+SOLR_COLLECTION = "sample"
 
 NET_ALPHA_BETA = "netalphabeta"
 NET_SOLR = "netsolr"
@@ -379,17 +379,16 @@ def create_test_solrclient():
     """ talk to both solr nodes from a container """
     solr1_ip_address = None
     with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
-        solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' solr1")
+        solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' solr1")
     name = 'solrclient-' + id_generator()
-    run("docker run --publish-service {}.{}.calico --name {} -i {} "
-        "curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
+    run("docker run --net {} --name {} -i {} curl -sSL http://{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
 
     solr2_ip_address = None
     with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
-        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' solr2")
+        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' solr2")
     name = 'solrclient-' + id_generator()
-    run("docker run --publish-service {}.{}.calico --name {} -i {} "
-        "curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr2_ip_address))
+    run("docker run --net {} --name {} -i {} "
+        "curl -sSL http://{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, solr2_ip_address))
 
 @roles('solr1dockerhost')
 def solr_collection():
