@@ -43,7 +43,7 @@ DOCKER_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/
 
 SOLR_IMAGE = 'makuk66/docker-solr:5.2-no-expose'
 ZOOKEEPER_IMAGE = 'jplock/zookeeper'
-ZOOKEEPER_NAME = 'zookeeper3'
+ZOOKEEPER_NAME = 'zookeeper1'
 
 BUSYBOX_IMAGE = 'busybox:latest'
 UBUNTU_IMAGE = 'ubuntu:latest'
