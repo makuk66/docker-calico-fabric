@@ -322,10 +322,11 @@ def ping_test_containers():
     beta_name = 'c-' + TEST_BETA
     alpha_address = None
     beta_address = None
+    inspect_path='{{ .NetworkSettings.Networks.' + NET_ALPHA_BETA + '.IPAddress }}'
     with settings(host_string=get_docker_host_for_role('alpha_dockerhost')):
-        alpha_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + alpha_name)
+        alpha_address = run("docker inspect --format '{}' {}".format(inspect_path, alpha_name))
     with settings(host_string=get_docker_host_for_role('beta_dockerhost')):
-        beta_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + beta_name)
+        beta_address = run("docker inspect --format '{}' {}".format(inspect_path, beta_name))
     with settings(host_string=get_docker_host_for_role('alpha_dockerhost')):
         run("docker exec -i {} ping -c 1 {}".format(alpha_name, beta_address))
     with settings(host_string=get_docker_host_for_role('beta_dockerhost')):
