@@ -401,7 +401,7 @@ def solr_collection():
 def solr_data():
     """ load test data into solr """
     run("docker exec -it --user=solr solr1 "
-        "bin/post -c {} /opt/solr/example/exampledocs/books.json".format(SOLR_COLLECTION))
+        "bin/post -c {} /opt/solr/example/exampledocs/manufacturers.xml".format(SOLR_COLLECTION))
 
 @roles('docker_cli')
 def add_bgp_peer():
