@@ -336,9 +336,10 @@ def ping_test_containers():
 def create_test_zookeeper():
     """ create zookeeper container """
     run("docker pull {}".format(ZOOKEEPER_IMAGE), pty=False)
-    container_id = run("docker run --publish-service zookeeper.{}.calico --name {} -tid {}".format(
+    container_id = run("docker run --net {} --name {} -tid {}".format(
         NET_SOLR, ZOOKEEPER_NAME, ZOOKEEPER_IMAGE))
-    run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
+
+    run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + ZOOKEEPER_NAME)
 
 @roles('all')
 @parallel
@@ -362,10 +363,10 @@ def create_test_solr(name):
     """ create a container running solr """
     run("docker pull {}".format(SOLR_IMAGE), pty=False)
     with settings(host_string=get_docker_host_for_role('zookeeperdockerhost')):
-        zookeeper_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + ZOOKEEPER_NAME)
-    container_id = run("docker run --publish-service {}.{}.calico --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(
-        name, NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
-    run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
+        zookeeper_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + ZOOKEEPER_NAME)
+    container_id = run("docker run --net {} --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(
+        NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
+    run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + container_id)
 
     time.sleep(15)
 
