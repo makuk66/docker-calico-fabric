@@ -121,6 +121,13 @@ def docker_version():
     run('status docker')
 
 @roles('all')
+def remove_docker():
+    sudo('service docker stop')
+    sudo('rm -fr /var/lib/docker')
+    sudo('apt-get purge docker')
+    run('rm -f calicoctl etcd*')
+
+@roles('all')
 def install_prerequisites():
     """ install OS pre-requisites """
     sudo("modprobe ip6_tables")
@@ -417,7 +424,6 @@ def install():
     execute(install_etcd)
     execute(check_etcd)
     execute(start_calico_containers)
-    execute(calicoctl_pool)
     execute(create_networks)
     execute(configure_network_profiles)
 
