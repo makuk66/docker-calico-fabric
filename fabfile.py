@@ -123,7 +123,7 @@ def install_prerequisites():
     append("/etc/modules", "xt_set", use_sudo=True)
     sudo("sysctl -w net.ipv6.conf.all.forwarding=1")
     sudo("echo net.ipv6.conf.all.forwarding=1 > /etc/sysctl.d/60-ipv6-forwarding.conf")
-    sudo("apt-get install -y unzip curl")
+    sudo("apt-get install -y -q unzip curl")
 
 @roles('all')
 def install_calico():
