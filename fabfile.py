@@ -377,18 +377,11 @@ def create_test_solr(name):
 @roles('solrclientdockerhost')
 def create_test_solrclient():
     """ talk to both solr nodes from a container """
-    solr1_ip_address = None
-    with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
-        solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' solr1")
     name = 'solrclient-' + id_generator()
-    run("docker run --net {} --name {} -i {} curl -sSL http://{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
-
-    solr2_ip_address = None
-    with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
-        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' solr2")
+    run("docker run --net {} --name {} -i {} curl -sSL http://solr1.{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, NET_SOLR))
     name = 'solrclient-' + id_generator()
     run("docker run --net {} --name {} -i {} "
-        "curl -sSL http://{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, solr2_ip_address))
+        "curl -sSL http://solr2.{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, NET_SOLR))
 
 @roles('solr1dockerhost')
 def solr_collection():
