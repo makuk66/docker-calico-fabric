@@ -121,11 +121,22 @@ def docker_version():
     run('status docker')
 
 @roles('all')
-def remove_docker():
-    sudo('service docker stop')
-    sudo('rm -fr /var/lib/docker')
-    sudo('apt-get purge docker')
-    run('rm -f calicoctl etcd*')
+def remove_everything():
+    run("docker ps --format '{{ .ID }}' --no-trunc | xargs -n 1 --no-run-if-empty docker kill")
+    run("docker ps --all --format '{{ .ID }}' --no-trunc | xargs -n 1 --no-run-if-empty docker rm")
+    sudo('service docker stop || true')
+    sudo('service etcd stop || true')
+    sudo('rm -f /etc/init/etcd.conf')
+    # TODO: now remove leftover mount pounts. Maybe something like
+    if exists('/var/lib/docker'):
+        docker_dir=run("readlink /var/lib/docker/ || true")
+        if docker_dir == "":
+            docker_dir = '/var/lib/docker'
+        sudo("grep {} /proc/mounts | xargs -n 1 --no-run-if-empty umount -f".format(docker_dir))
+        sudo('rm -fr /var/lib/docker')
+    sudo('apt-get --yes purge docker-engine')
+    run('rm -fr calicoctl etcd*')
+    sudo('rm -fr /var/log/calico /var/log/upstart/docker.log /var/log/upstart/etcd.log')
 
 @roles('all')
 def install_prerequisites():
