@@ -12,6 +12,7 @@ Based on http://www.projectcalico.org/docker-libnetwork-is-almost-here-and-calic
 from fabric.api import env, run, sudo, execute, settings, roles
 from fabric.contrib.files import exists, append, put, upload_template
 from fabric.network import disconnect_all
+from fabric.decorators import parallel
 import time, os, re, string, random, StringIO
 
 # define cluster IPs
@@ -334,6 +335,7 @@ def create_test_zookeeper():
     run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
 
 @roles('all')
+@parallel
 def pull_docker_images():
     """ pull images we'll use """
     for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE,
