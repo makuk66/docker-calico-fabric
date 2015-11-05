@@ -101,9 +101,9 @@ def install_docker():
     distrib_codename = run("grep DISTRIB_CODENAME /etc/lsb-release |sed 's/.*=//'")
     put(StringIO.StringIO('deb https://apt.dockerproject.org/repo ubuntu-{} main\n'.format(distrib_codename)),
         '/etc/apt/sources.list.d/docker.list', use_sudo=True)
-    sudo('DEBIAN_FRONTEND=noninteractive apt-get -q update')
+    sudo('apt-get --yes --quiet update')
     sudo('apt-cache policy docker-engine')
-    sudo('apt-get --yes install docker-engine')
+    sudo('apt-get --yes --quiet install docker-engine')
     sudo('useradd {} docker'.format(env.user))
     sudo('sudo service docker start')
     time.sleep(1)
@@ -124,7 +124,7 @@ def install_prerequisites():
     append("/etc/modules", "xt_set", use_sudo=True)
     sudo("sysctl -w net.ipv6.conf.all.forwarding=1")
     sudo("echo net.ipv6.conf.all.forwarding=1 > /etc/sysctl.d/60-ipv6-forwarding.conf")
-    sudo("apt-get install -y -q unzip curl")
+    sudo("apt-get install --yes --quiet unzip curl")
 
 @roles('all')
 def install_calico():
