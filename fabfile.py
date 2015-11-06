@@ -39,7 +39,6 @@ env.user = "mak"
 
 CALICO_VERSION = "0.10.0"
 CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/calicoctl".format(CALICO_VERSION)
-DOCKER_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/docker".format(CALICO_VERSION)
 
 SOLR_IMAGE = 'makuk66/docker-solr:5.2-no-expose'
 ZOOKEEPER_IMAGE = 'jplock/zookeeper'
@@ -47,7 +46,8 @@ ZOOKEEPER_NAME = 'zookeeper1'
 
 BUSYBOX_IMAGE = 'busybox:latest'
 UBUNTU_IMAGE = 'ubuntu:latest'
-CALICO_IMAGE = "calico/node:v{}".format(CALICO_VERSION)
+CALICO_IMAGE = 'calico/node:latest'
+CALICO_LIBNETWORK_IMAGE = 'calico/node-libnetwork:latest'
 ETCD_URL="https://github.com/coreos/etcd/releases/download/v2.2.1/etcd-v2.2.1-linux-amd64.tar.gz"
 
 SOLR_COLLECTION = "sample"
@@ -329,8 +329,7 @@ def create_test_zookeeper():
 @parallel
 def pull_docker_images():
     """ pull images we'll use """
-    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE,
-        'calico/node:latest', 'calico/node-libnetwork:latest']:
+    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE, CALICO_IMAGE, CALICO_LIBNETWORK_IMAGE]:
         run("docker pull {}".format(image), pty=False)
 
 @roles('solr1dockerhost')
