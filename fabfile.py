@@ -277,22 +277,6 @@ def create_test_container_beta():
     """ create second test container """
     create_test_container(TEST_BETA)
 
-@roles('alpha_dockerhost')
-def create_test_container_dcd():
-    """ experimental image to try and get solr working. TODO: remove """
-    image = "makuk66/docker-calico-devices:latest"
-    name = id_generator()
-    container_name = 'c-' + name
-    service_name = 'srv{}'.format(name)
-    full_service_name = '{}.{}.calico'.format(service_name, NET_SOLR)
-    run("docker pull {}".format(image), pty=False)
-    container_id = run("docker run --publish-service {} --name {} -tid {}".format(
-        full_service_name, container_name, image))
-    inspect_container(container_id)
-    container_name = run("docker inspect --format '{{.Name}}' " + container_id)[1:]
-    print "connect with: fab --host {} -- docker exec -it {} /bin/bash".format(
-        env.host, container_name)
-
 # http://stackoverflow.com/questions/2257441/random-string-generation-with-upper-case-letters-and-digits-in-python
 def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
     """ return a random identifier """
