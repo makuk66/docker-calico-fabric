@@ -312,7 +312,8 @@ def inspect_container(container_name_or_id=''):
     container_name = run("docker inspect --format '{{.Name}}' " + container_name_or_id)
     if container_name[0] == '/':
         container_name = container_name[1:]
-    ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
+    net = run("docker inspect --format '{{ .HostConfig.NetworkMode }}' " + container_id)
+    ip_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + net + ".IPAddress }}' " + container_id)
     print "container_id={}, container_name={}, ip_address={}".format(
         container_id, container_name, ip_address)
     run("docker exec -i {} hostname".format(container_id))
@@ -338,8 +339,7 @@ def create_test_zookeeper():
     run("docker pull {}".format(ZOOKEEPER_IMAGE), pty=False)
     container_id = run("docker run --net {} --name {} -tid {}".format(
         NET_SOLR, ZOOKEEPER_NAME, ZOOKEEPER_IMAGE))
-
-    run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + ZOOKEEPER_NAME)
+    inspect_container(ZOOKEEPER_NAME)
 
 @roles('all')
 @parallel
@@ -366,7 +366,7 @@ def create_test_solr(name):
         zookeeper_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + ZOOKEEPER_NAME)
     container_id = run("docker run --net {} --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(
         NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
-    run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + container_id)
+    inspect_container(name)
 
     time.sleep(15)
 
