@@ -135,7 +135,10 @@ def remove_everything():
         sudo("grep {} /proc/mounts | xargs -n 1 --no-run-if-empty umount -f".format(docker_dir))
         sudo('rm -fr /var/lib/docker')
     sudo('apt-get --yes purge docker-engine')
-    run('rm -fr calicoctl etcd*')
+    # Note: etc uses the current directory as the data directory, and in the upstart config we
+    # chdir to the etcd source directory. Etcd then creates a default.etcd subdirectory, owned by root.
+    # So we need to be root to remove this. TODO: run etcd under an "etcd" user.
+    sudo('rm -fr calicoctl etcd*')
     sudo('rm -fr /var/log/calico /var/log/upstart/docker.log /var/log/upstart/etcd.log')
 
 @roles('all')
