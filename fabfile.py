@@ -25,6 +25,7 @@ env.cluster_address = {
 
 env.roledefs = {
     'all': sorted(env.cluster_address.keys()),
+    'etcd': sorted(env.cluster_address.keys()),
     'docker_cli': ['trinity10'],
     'alpha_dockerhost': ['trinity10'],
     'beta_dockerhost': ['trinity20'],
@@ -168,48 +169,69 @@ def get_addressv4_address():
         raise Exception("cannot get IP address")
     return ipv4_address
 
-@roles('all')
+@roles('etcd')
 def install_etcd():
     """ install etcd """
-    if env.host == env.etcd_host:
-        etc_tgz = ETCD_URL.rpartition('/')[2]
-        etc_dir = etc_tgz.replace('.tar.gz', '')
-        if not exists(etc_tgz):
-            run("wget -nv {}".format(ETCD_URL))
-        if not exists(etc_dir):
-            run("tar xvzf {}".format(etc_tgz))
-        etcd_home = run("cd {}; /bin/pwd".format(etc_dir))
-        ipv4_address = get_addressv4_address()
-        ctx = {
-            "etcd_home": etcd_home,
-            "advertise_client_urls": 'http://{}:2379'.format(ipv4_address),
-            "listen_client_urls": 'http://0.0.0.0:2379'
-        }
-        upload_template(filename='etcd.conf', destination='/etc/init/etcd.conf',
-                        template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
+    # See https://github.com/coreos/etcd/blob/master/Documentation/clustering.md#static
+    my_name = "etcd-{}".format(env.host)
+    initial_cluster_members = []
+    for name in sorted(env.cluster_address.keys()):
+        ipv4_address = env.cluster_address[name]
+        initial_cluster_members.append("etcd-{}=http://{}:{}".format(name, ipv4_address, env.etcd_peer_port))
+    initial_cluster = ",".join(initial_cluster_members)
 
-        sudo("service etcd start")
-        time.sleep(2)
+    etc_tgz = ETCD_URL.rpartition('/')[2]
+    etc_dir = etc_tgz.replace('.tar.gz', '')
+    if not exists(etc_tgz):
+        run("wget -nv {}".format(ETCD_URL))
+    if not exists(etc_dir):
+        run("tar xvzf {}".format(etc_tgz))
+    etcd_home = run("cd {}; /bin/pwd".format(etc_dir))
+    ipv4_address = get_addressv4_address()
+    ctx = {
+        "name": my_name,
+        "etcd_home": etcd_home,
+        "advertise_client_urls": 'http://{}:{}'.format(ipv4_address, env.etcd_client_port),
+        "listen_client_urls": 'http://0.0.0.0:{}'.format(env.etcd_client_port),
+        "advertise_peer_urls": 'http://{}:{}'.format(ipv4_address, env.etcd_peer_port),
+        "etcd_peer_port": env.etcd_peer_port,
+        "initial_cluster": initial_cluster
+    }
+    upload_template(filename='etcd.conf', destination='/etc/init/etcd.conf',
+                    template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
 
-    etcd_address = env.cluster_address[env.etcd_host]
+    sudo("service etcd start")
+    time.sleep(2)
+
+    # configure Docker to use our etcd cluster
+    for name in sorted(env.cluster_address.keys()):
+        ipv4_address = env.cluster_address[name]
+        initial_cluster_members.append("{}:{}".format(name, ipv4_address, env.etcd_client_port))
+    initial_cluster = ",".join(initial_cluster_members)
+
     append("/etc/default/docker",
-           'DOCKER_OPTS="--cluster-store=etcd://{}:2379"'.format(etcd_address),
+           'DOCKER_OPTS="--cluster-store=etcd://{}"'.format(initial_cluster),
            use_sudo=True)
 
     sudo("service docker restart")
     time.sleep(5)
+
+
+@roles('etcd')
+def remove_etcd():
+    sudo("service etcd stop || true")
+    sudo("rm -fr etcd* /etc/init/etcd.conf /var/log/upstart/etcd.log")
 
 @roles('all')
 def docker_clean():
     """ remove containers that have exited """
     run("docker rm `docker ps --no-trunc --all --quiet --filter=status=exited`")
 
-@roles('all')
+@roles('etcd')
 def check_etcd():
-    """ check etcd """
-    etcd_address = env.cluster_address[env.etcd_host]
-    run("curl -L http://{}:2379/version".format(etcd_address))
-    run("curl -L http://{}:2379/v2/machines".format(etcd_address))
+    """ check etcd: on each etcd host, talk to the local etcd server """
+    run("curl -L http://{}:{}/version".format("localhost", env.etcd_client_port))
+    run("curl -L http://{}:{}/v2/machines".format("localhost", env.etcd_client_port))
 
 @roles('all')
 def start_calico_containers():
@@ -219,7 +241,7 @@ def start_calico_containers():
         ipv4_address = get_addressv4_address()
         print "creating and starting calico-node"
         etcd_address = env.cluster_address[env.etcd_host]
-        sudo("ETCD_AUTHORITY={}:2379 ./calicoctl node --libnetwork --ip={}".format(etcd_address, ipv4_address))
+        sudo("ETCD_AUTHORITY={}:{} ./calicoctl node --libnetwork --ip={}".format(etcd_address, env.etcd_client_port, ipv4_address))
     elif "Up" in existing:
         print "calico-node already running"
         return
@@ -231,7 +253,7 @@ def start_calico_containers():
 def create_networks():
     """ create two example networks """
     etcd_address = env.cluster_address[env.etcd_host]
-    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
+    with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
         run("docker network create --driver=calico --subnet 192.168.91.0/24 " + NET_ALPHA_BETA)
         run("docker network create --driver=calico --subnet 192.168.89.0/24 " + NET_SOLR)
         run("docker network ls")
@@ -262,7 +284,7 @@ def get_profile_for_network(wanted_name):
 def configure_network_profiles():
     """ configure network profiles """
     etcd_address = env.cluster_address[env.etcd_host]
-    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
+    with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
         net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
         run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
 
@@ -384,7 +406,7 @@ def solr_data():
 def add_bgp_peer():
     """ configure BGP peer """
     etcd_address = env.cluster_address[env.etcd_host]
-    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
+    with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
         run("./calicoctl bgp peer add 192.168.77.1 as 64511")
 
 @roles('all')
