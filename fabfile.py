@@ -58,7 +58,7 @@ NET_SOLR = "netsolr"
 TEST_ALPHA = "alpha"
 TEST_BETA = "beta"
 
-env.etcd_client_port = 2379
+env.etcd_client_port = 4001
 env.etcd_peer_port = 7001
 
 TEMPLATES = 'templates'
@@ -179,8 +179,8 @@ def install_etcd():
         ipv4_address = get_addressv4_address()
         ctx = {
             "etcd_home": etcd_home,
-            "advertise_client_urls": 'http://{}:2379'.format(ipv4_address),
-            "listen_client_urls": 'http://0.0.0.0:2379'
+            "advertise_client_urls": 'http://{}:{}'.format(ipv4_address, env.etcd_client_port),
+            "listen_client_urls": 'http://0.0.0.0:{}'.format(env.etcd_client_port)
         }
         upload_template(filename='etcd.conf', destination='/etc/init/etcd.conf',
                         template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
@@ -190,7 +190,7 @@ def install_etcd():
 
     etcd_address = env.cluster_address[env.etcd_host]
     append("/etc/default/docker",
-           'DOCKER_OPTS="--cluster-store=etcd://{}:2379"'.format(etcd_address),
+           'DOCKER_OPTS="--cluster-store=etcd://{}:{}"'.format(etcd_address, env.etcd_client_port),
            use_sudo=True)
 
     sudo("service docker restart")
@@ -205,8 +205,8 @@ def docker_clean():
 def check_etcd():
     """ check etcd """
     etcd_address = env.cluster_address[env.etcd_host]
-    run("curl -L http://{}:2379/version".format(etcd_address))
-    run("curl -L http://{}:2379/v2/machines".format(etcd_address))
+    run("curl -L http://{}:{}/version".format(etcd_address, env.etcd_client_port))
+    run("curl -L http://{}:{}/v2/machines".format(etcd_address, env.etcd_client_port))
 
 @roles('all')
 def start_calico_containers():
@@ -216,7 +216,7 @@ def start_calico_containers():
         ipv4_address = get_addressv4_address()
         print "creating and starting calico-node"
         etcd_address = env.cluster_address[env.etcd_host]
-        sudo("ETCD_AUTHORITY={}:2379 ./calicoctl node --libnetwork --ip={}".format(etcd_address, ipv4_address))
+        sudo("./calicoctl node --libnetwork --ip={}".format(ipv4_address))
     elif "Up" in existing:
         print "calico-node already running"
         return
@@ -228,10 +228,9 @@ def start_calico_containers():
 def create_networks():
     """ create two example networks """
     etcd_address = env.cluster_address[env.etcd_host]
-    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
-        run("docker network create --driver=calico --subnet 192.168.91.0/24 " + NET_ALPHA_BETA)
-        run("docker network create --driver=calico --subnet 192.168.89.0/24 " + NET_SOLR)
-        run("docker network ls")
+    run("docker network create --driver=calico --subnet 192.168.91.0/24 " + NET_ALPHA_BETA)
+    run("docker network create --driver=calico --subnet 192.168.89.0/24 " + NET_SOLR)
+    run("docker network ls")
 
 def get_profile_for_network(wanted_name):
     """ get the profile ID for a named network """
@@ -259,13 +258,12 @@ def get_profile_for_network(wanted_name):
 def configure_network_profiles():
     """ configure network profiles """
     etcd_address = env.cluster_address[env.etcd_host]
-    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
-        net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
-        run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
+    net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
+    run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
 
-        net_solr_profile = get_profile_for_network(NET_SOLR)
-        run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
-        run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
+    net_solr_profile = get_profile_for_network(NET_SOLR)
+    run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
+    run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
 
 @roles('alpha_dockerhost')
 def create_test_container_alpha():
@@ -381,8 +379,7 @@ def solr_data():
 def add_bgp_peer():
     """ configure BGP peer """
     etcd_address = env.cluster_address[env.etcd_host]
-    with shell_env(ETCD_AUTHORITY='{}:2379'.format(etcd_address)):
-        run("./calicoctl bgp peer add 192.168.77.1 as 64511")
+    run("./calicoctl bgp peer add 192.168.77.1 as 64511")
 
 @roles('all')
 def docker_ps():
