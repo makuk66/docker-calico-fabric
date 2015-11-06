@@ -127,7 +127,7 @@ def remove_everything():
     run("docker ps --all --format '{{ .ID }}' --no-trunc | xargs -n 1 --no-run-if-empty docker rm")
     sudo('service docker stop || true')
     sudo('service etcd stop || true')
-    sudo('rm -f /etc/init/etcd.conf')
+    sudo('rm -f /etc/init/etcd.conf /etc/default/docker')
     # TODO: now remove leftover mount pounts. Maybe something like
     if exists('/var/lib/docker'):
         docker_dir=run("readlink /var/lib/docker/ || true")
@@ -136,8 +136,8 @@ def remove_everything():
         sudo("grep {} /proc/mounts | xargs -n 1 --no-run-if-empty umount -f".format(docker_dir))
         sudo('rm -fr /var/lib/docker')
     sudo('apt-get --yes purge docker-engine')
-    # Note: etc uses the current directory as the data directory, and in the upstart config we
-    # chdir to the etcd source directory. Etcd then creates a default.etcd subdirectory, owned by root.
+    # Note: etc uses the current directory to place the data subdirectory, and in the upstart config we
+    # chdir to the etcd source directory. Etcd then creates a subdirectory, owned by root.
     # So we need to be root to remove this. TODO: run etcd under an "etcd" user.
     sudo('rm -fr calicoctl etcd*')
     sudo('rm -fr /var/log/calico /var/log/upstart/docker.log /var/log/upstart/etcd.log')
@@ -204,9 +204,10 @@ def install_etcd():
     time.sleep(2)
 
     # configure Docker to use our etcd cluster
+    initial_cluster_members = []
     for name in sorted(env.cluster_address.keys()):
         ipv4_address = env.cluster_address[name]
-        initial_cluster_members.append("{}:{}".format(name, ipv4_address, env.etcd_client_port))
+        initial_cluster_members.append("{}:{}".format(ipv4_address, env.etcd_client_port))
     initial_cluster = ",".join(initial_cluster_members)
 
     append("/etc/default/docker",
