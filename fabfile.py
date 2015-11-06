@@ -286,8 +286,8 @@ def create_test_container(name='', image=BUSYBOX_IMAGE):
     """ create a test container """
     container_name = 'c-' + name
     container_id = run("docker pull {}".format(image), pty=False)
-    container_id = run("docker run --net {} --name {} -tid {}".format(
-        NET_ALPHA_BETA, container_name, image))
+    container_id = run("docker run --net {} --name {} --hostname={}.{} -tid {}".format(
+        NET_ALPHA_BETA, container_name, container_name, NET_ALPHA_BETA, image))
     inspect_container(container_id)
 
 def inspect_container(container_name_or_id=''):
@@ -321,8 +321,8 @@ def ping_test_containers():
 def create_test_zookeeper():
     """ create zookeeper container """
     run("docker pull {}".format(ZOOKEEPER_IMAGE), pty=False)
-    container_id = run("docker run --net {} --name {} -tid {}".format(
-        NET_SOLR, ZOOKEEPER_NAME, ZOOKEEPER_IMAGE))
+    container_id = run("docker run --net {} --name {} --hostname={}.{} -tid {}".format(
+        NET_SOLR, ZOOKEEPER_NAME, ZOOKEEPER_NAME, NET_SOLR, ZOOKEEPER_IMAGE))
     inspect_container(ZOOKEEPER_NAME)
 
 @roles('all')
@@ -348,8 +348,8 @@ def create_test_solr(name):
     run("docker pull {}".format(SOLR_IMAGE), pty=False)
     with settings(host_string=get_docker_host_for_role('zookeeperdockerhost')):
         zookeeper_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + ZOOKEEPER_NAME)
-    container_id = run("docker run --net {} --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(
-        NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
+    container_id = run("docker run --net {} --name {} --hostname={}.{} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(
+        NET_SOLR, name, name, NET_SOLR, SOLR_IMAGE, zookeeper_address))
     inspect_container(name)
 
     time.sleep(15)
@@ -362,10 +362,9 @@ def create_test_solr(name):
 def create_test_solrclient():
     """ talk to both solr nodes from a container """
     name = 'solrclient-' + id_generator()
-    run("docker run --net {} --name {} -i {} curl -sSL http://solr1.{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, NET_SOLR))
+    run("docker run --net {} --name {} --hostname {}.{} -i {} curl -sSL http://solr1.{}:8983/".format(NET_SOLR, name, name, NET_SOLR, SOLR_IMAGE, NET_SOLR))
     name = 'solrclient-' + id_generator()
-    run("docker run --net {} --name {} -i {} "
-        "curl -sSL http://solr2.{}:8983/".format(NET_SOLR, name, SOLR_IMAGE, NET_SOLR))
+    run("docker run --net {} --name {} --hostname {}.{} -i {} curl -sSL http://solr2.{}:8983/".format(NET_SOLR, name, name, NET_SOLR, SOLR_IMAGE, NET_SOLR))
 
 @roles('solr1dockerhost')
 def solr_collection():
