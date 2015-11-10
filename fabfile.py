@@ -72,6 +72,7 @@ def get_docker_host_for_role(role):
 def info():
     """ Show machine information """
     run('cat /etc/lsb-release')
+    run('uname -a')
 
 @roles('all')
 def ping():
@@ -123,19 +124,34 @@ def docker_version():
 
 @roles('all')
 def remove_everything():
+    # kill all containers
     run("docker ps --format '{{ .ID }}' --no-trunc | xargs -n 1 --no-run-if-empty docker kill")
+    # remove all containers
     run("docker ps --all --format '{{ .ID }}' --no-trunc | xargs -n 1 --no-run-if-empty docker rm")
+    # remove all volumes
+    run("docker volume ls | tail -n +2 | awk '{print $2}' | xargs -n 1 --no-run-if-empty docker volume rm")
+    # remove all images
+    run("docker images| tail -n +2 | awk '{print $3}' | xargs -n 1 --no-run-if-empty docker rmi")
+    # remove networks
+    sudo("docker network ls | tail -n +2 | grep calico | awk '{print $2}' | xargs -n 1 --no-run-if-empty docker network rm || true")
     sudo('service docker stop || true')
     sudo('service etcd stop || true')
     sudo('rm -f /etc/init/etcd.conf /etc/default/docker')
     # TODO: now remove leftover mount pounts. Maybe something like
     if exists('/var/lib/docker'):
-        docker_dir=run("readlink /var/lib/docker/ || true")
-        if docker_dir == "":
-            docker_dir = '/var/lib/docker'
-        sudo("grep {} /proc/mounts | xargs -n 1 --no-run-if-empty umount -f".format(docker_dir))
-        sudo('rm -fr /var/lib/docker')
+        docker_libdir=run("readlink /var/lib/docker/ || true")
+        if docker_libdir == "":
+            docker_libdir = '/var/lib/docker'
+        sudo("grep {} /proc/mounts | xargs -n 1 --no-run-if-empty umount -f".format(docker_libdir))
+        sudo('rm -fr {}'.docker_libdir)
+    if exists('/run/docker'):
+        docker_rundir=run("readlink /run/docker/ || true")
+        if docker_rundir == "":
+            docker_rundir = '/run/docker'
+        # TODO: do we need something special for /run/docker/netns/* ?
+        sudo('rm -fr {}'.format(docker_rundir))
     sudo('apt-get --yes purge docker-engine')
+    sudo('rm -fr /run/docker.pid /run/docker.sock')
     # Note: etc uses the current directory to place the data subdirectory, and in the upstart config we
     # chdir to the etcd source directory. Etcd then creates a subdirectory, owned by root.
     # So we need to be root to remove this. TODO: run etcd under an "etcd" user.
