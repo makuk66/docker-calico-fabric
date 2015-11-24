@@ -38,7 +38,7 @@ env.etcd_host = "trinity10"
 env.etcd_cluster_token = "etcd-cluster-2123"
 env.user = "mak"
 
-CALICO_VERSION = "0.10.0"
+CALICO_VERSION = "0.12.0"
 CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/calicoctl".format(CALICO_VERSION)
 
 SOLR_IMAGE = 'makuk66/docker-solr:5.2-no-expose'
@@ -143,7 +143,7 @@ def remove_everything():
         if docker_libdir == "":
             docker_libdir = '/var/lib/docker'
         sudo("grep {} /proc/mounts | xargs -n 1 --no-run-if-empty umount -f".format(docker_libdir))
-        sudo('rm -fr {}'.docker_libdir)
+        sudo('rm -fr {}'.format(docker_libdir))
     if exists('/run/docker'):
         docker_rundir=run("readlink /run/docker/ || true")
         if docker_rundir == "":
@@ -167,7 +167,7 @@ def install_prerequisites():
     append("/etc/modules", "xt_set", use_sudo=True)
     sudo("sysctl -w net.ipv6.conf.all.forwarding=1")
     sudo("echo net.ipv6.conf.all.forwarding=1 > /etc/sysctl.d/60-ipv6-forwarding.conf")
-    sudo("apt-get install --yes --quiet unzip curl")
+    sudo("apt-get install --yes --quiet unzip curl git")
 
 @roles('all')
 def install_calico():
@@ -219,6 +219,8 @@ def install_etcd():
     sudo("service etcd start")
     time.sleep(2)
 
+@roles('etcd')
+def install_docker_config():
     # configure Docker to use our etcd cluster
     initial_cluster_members = []
     for name in sorted(env.cluster_address.keys()):
@@ -226,9 +228,16 @@ def install_etcd():
         initial_cluster_members.append("{}:{}".format(ipv4_address, env.etcd_client_port))
     initial_cluster = ",".join(initial_cluster_members)
 
-    append("/etc/default/docker",
-           'DOCKER_OPTS="--cluster-store=etcd://{}"'.format(initial_cluster),
-           use_sudo=True)
+    # update DOCKER_OPTS. Note this also changes the -H to listen on tcp
+    ctx = {
+        "listen": "{}:{}".format(env.cluster_address[env.host], env.docker_port),
+        "cluster_store": "etcd://{}".format(initial_cluster),
+        "cluster_advertise": "{}:{}".format(env.cluster_address[env.host], env.docker_port)
+
+    }
+    upload_template(filename='docker.default', destination='/etc/default/docker',
+                    template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
+
 
     sudo("service docker restart")
     time.sleep(5)
@@ -271,13 +280,16 @@ def create_networks():
     """ create two example networks """
     etcd_address = env.cluster_address[env.etcd_host]
     with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
-        run("docker network create --driver=calico --subnet 192.168.91.0/24 " + NET_ALPHA_BETA)
-        run("docker network create --driver=calico --subnet 192.168.89.0/24 " + NET_SOLR)
+        run("./calicoctl pool add 192.168.91.0/24")
+        run("docker network ls")
+        run("docker network create --driver=calico --ipam-driver=calico " + NET_ALPHA_BETA)
+        run("docker network create --driver=calico --ipam-driver=calico " + NET_SOLR)
         run("docker network ls")
 
 def get_profile_for_network(wanted_name):
     """ get the profile ID for a named network """
     # there must be a better way to get profiles for named networks.
+    # TODO: See what https://github.com/projectcalico/calico-docker/blob/master/docs/getting-started/libnetwork/Demonstration.md says
     networks = run("docker network ls")
     found_network_id = None
     for line in networks.splitlines():
@@ -441,9 +453,11 @@ def install():
     execute(install_docker)
     execute(docker_version)
     execute(pull_docker_images)
+
     execute(install_calico)
     execute(install_etcd)
     execute(check_etcd)
+    execute(install_docker_config)
     execute(start_calico_containers)
     execute(create_networks)
     execute(configure_network_profiles)
