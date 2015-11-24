@@ -280,11 +280,18 @@ def create_networks():
     """ create two example networks """
     etcd_address = env.cluster_address[env.etcd_host]
     with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
-        run("./calicoctl pool add 192.168.91.0/24")
         run("docker network ls")
         run("docker network create --driver=calico --ipam-driver=calico " + NET_ALPHA_BETA)
         run("docker network create --driver=calico --ipam-driver=calico " + NET_SOLR)
         run("docker network ls")
+
+@roles('docker_cli')
+def calicoctl_pool():
+    """ configure the Calico address pool """
+    run("./calicoctl pool show")
+    run("./calicoctl pool add 192.168.89.0/24")
+    run("./calicoctl pool remove 192.168.0.0/16")
+    run("./calicoctl pool show")
 
 def get_profile_for_network(wanted_name):
     """ get the profile ID for a named network """
@@ -459,6 +466,7 @@ def install():
     execute(check_etcd)
     execute(install_docker_config)
     execute(start_calico_containers)
+    execute(calicoctl_pool)
     execute(create_networks)
     execute(configure_network_profiles)
 
