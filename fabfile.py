@@ -289,7 +289,7 @@ def create_networks():
 def get_profile_for_network(wanted_name):
     """ get the profile ID for a named network """
     # there must be a better way to get profiles for named networks.
-    # TODO: See what https://github.com/projectcalico/calico-docker/blob/master/docs/getting-started/libnetwork/Demonstration.md says
+    # TODO: Use inspect. See https://github.com/projectcalico/calicqo-docker/blob/master/docs/getting-started/libnetwork/Demonstration.md
     networks = run("docker network ls")
     found_network_id = None
     for line in networks.splitlines():
