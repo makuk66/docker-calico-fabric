@@ -14,7 +14,7 @@ from fabric.contrib.files import exists, append, put, upload_template
 from fabric.network import disconnect_all
 from fabric.decorators import parallel
 from fabric.context_managers import shell_env
-import time, os, re, string, random, StringIO
+import time, os, re, string, random, StringIO, json
 
 # define cluster IPs
 env.cluster_address = {
@@ -61,6 +61,8 @@ TEST_BETA = "beta"
 
 env.etcd_client_port = 2379
 env.etcd_peer_port = 7001
+
+env.docker_port = 2375
 
 TEMPLATES = 'templates'
 
@@ -216,7 +218,7 @@ def install_etcd():
     upload_template(filename='etcd.conf', destination='/etc/init/etcd.conf',
                     template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
 
-    sudo("service etcd start")
+    sudo("service etcd restart")
     time.sleep(2)
 
 @roles('etcd')
@@ -296,25 +298,11 @@ def calicoctl_pool():
 def get_profile_for_network(wanted_name):
     """ get the profile ID for a named network """
     # there must be a better way to get profiles for named networks.
-    # TODO: Use inspect. See https://github.com/projectcalico/calicqo-docker/blob/master/docs/getting-started/libnetwork/Demonstration.md
-    networks = run("docker network ls")
-    found_network_id = None
-    for line in networks.splitlines():
-        if line.startswith("NETWORK ID"):
-            continue # skip header
-        (network_id, name, _) = line.split()
-        if name == wanted_name:
-            found_network_id = network_id
-    if found_network_id == None:
+    networks = run("docker network inspect {}".format(wanted_name))
+    if networks is None:
         raise Exception("network {} not found".format(wanted_name))
-    # the network ID is a short one like 6df57a08bc98. find the long version in the profiles
-    profiles = run("./calicoctl profile show")
-    for profile_line in profiles.splitlines():
-        match = re.search(r'\s({}\S+)'.format(found_network_id), profile_line)
-        if match is not None:
-            return match.group(1)
-    raise Exception("no profile found for network {}".format(found_network_id))
-
+    networks_parsed = json.loads(networks)
+    return networks_parsed[0]["Id"]
 
 @roles('docker_cli')
 def configure_network_profiles():
