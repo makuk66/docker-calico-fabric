@@ -6,21 +6,27 @@ and deploy solr.
 
 Work in progress.
 
+Based on:
+https://github.com/projectcalico/calico-containers/blob/master/docs/calico-with-docker/docker-network-plugin/ManualSetup.md
+https://github.com/projectcalico/calico-containers/blob/master/docs/calico-with-docker/docker-network-plugin/README.md
 """
 from fabric.api import env, run, sudo, execute, settings, roles
 from fabric.contrib.files import exists, append, put, upload_template
 from fabric.network import disconnect_all
-import time, os, re, string, random
+from fabric.decorators import parallel
+from fabric.context_managers import shell_env
+import time, os, re, string, random, StringIO, json
 
 # define cluster IPs
-env.cluster_addresss = {
+env.cluster_address = {
     'trinity10': '192.168.77.10',
     'trinity20': '192.168.77.20',
     'trinity30': '192.168.77.30'
 }
 
 env.roledefs = {
-    'all': sorted(env.cluster_addresss.keys()),
+    'all': sorted(env.cluster_address.keys()),
+    'etcd': sorted(env.cluster_address.keys()),
     'docker_cli': ['trinity10'],
     'alpha_dockerhost': ['trinity10'],
     'beta_dockerhost': ['trinity20'],
@@ -29,25 +35,23 @@ env.roledefs = {
     'solr2dockerhost': ['trinity20'],
     'solrclientdockerhost': ['trinity30'],
 }
-env.consul_host = "trinity10"
+env.etcd_host = "trinity10"
 env.etcd_cluster_token = "etcd-cluster-2123"
 env.user = "mak"
 
-CALICO_VERSION = "0.5.2"
-CALICOCTL_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/calicoctl".format(CALICO_VERSION)
-DOCKER_URL = "https://github.com/Metaswitch/calico-docker/releases/download/v{}/docker".format(CALICO_VERSION)
-CONSUL_URL = "https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip"
+CALICOCTL_URL = "http://www.projectcalico.org/latest/calicoctl"
 
-SOLR_IMAGE = 'makuk66/docker-solr:5.2-no-expose'
+SOLR_IMAGE = 'solr'
 ZOOKEEPER_IMAGE = 'jplock/zookeeper'
-ZOOKEEPER_NAME = 'zookeeper3'
+ZOOKEEPER_NAME = 'zookeeper1'
 
 BUSYBOX_IMAGE = 'busybox:latest'
 UBUNTU_IMAGE = 'ubuntu:latest'
-CALICO_IMAGE = "calico/node:v{}".format(CALICO_VERSION)
-ETCD_IMAGE = "quay.io/coreos/etcd:v2.0.11"
+CALICO_IMAGE = 'calico/node:latest'
+CALICO_LIBNETWORK_IMAGE = 'calico/node-libnetwork:latest'
+ETCD_URL="https://github.com/coreos/etcd/releases/download/v2.2.4/etcd-v2.2.4-linux-amd64.tar.gz"
 
-SOLR_COLLECTION = "books"
+SOLR_COLLECTION = "sample"
 
 NET_ALPHA_BETA = "netalphabeta"
 NET_SOLR = "netsolr"
@@ -55,8 +59,10 @@ NET_SOLR = "netsolr"
 TEST_ALPHA = "alpha"
 TEST_BETA = "beta"
 
-env.etcd_client_port = 4001
+env.etcd_client_port = 2379
 env.etcd_peer_port = 7001
+
+env.docker_port = 2375
 
 TEMPLATES = 'templates'
 
@@ -68,12 +74,13 @@ def get_docker_host_for_role(role):
 def info():
     """ Show machine information """
     run('cat /etc/lsb-release')
+    run('uname -a')
 
 @roles('all')
 def ping():
     """ Ping all the hosts in the cluster from this host """
-    for name in sorted(env.cluster_addresss.keys()):
-        run("ping -c 3 {}".format(env.cluster_addresss[name]))
+    for name in sorted(env.cluster_address.keys()):
+        run("ping -c 3 {}".format(env.cluster_address[name]))
 
 @roles('all')
 def copy_ssh_key(ssh_pub_key="~/.ssh/id_dsa.pub", user=env.user):
@@ -93,28 +100,21 @@ def setup_sudoers():
     append("/etc/sudoers", "{0}  ALL=(ALL) NOPASSWD:ALL".format(env.user), use_sudo=True)
 
 @roles('all')
-def install_experimental_docker():
-    """ Execute the exerimental docker recipe, then replace the binary with
-        a specific Calico version
-    """
-    current_docker_version = run("docker version | grep '^Server version: ' | sed 's/^.* //'")
-    if "command not found" in current_docker_version:
-        sudo('wget -qO- https://experimental.docker.com/ | sh')
-        sudo('usermod -aG docker {}'.format(env.user))
-        disconnect_all()
-    # per https://github.com/Metaswitch/calico-docker/releases/tag/v0.5.2 release notes,
-    # use a pre-release version of docker
-    filename = "docker"
-    run("rm -f {}".format(filename)) # remove old downloads
-    run("wget {} > /dev/null 2>&1".format(DOCKER_URL))
-    run("chmod a+x {}".format(filename))
-    if exists('/etc/init/docker.conf'):
-        sudo("stop docker || echo oh well")
-    docker_location = run("which docker||true")
-    if docker_location == "":
-        docker_location = '/usr/bin/docker'
-    sudo("mv {} {}".format(filename, docker_location))
-    sudo("start docker")
+def install_docker():
+    if exists('/usr/bin/docker'):
+        return
+
+    # per http://docs.docker.com/engine/installation/ubuntulinux/
+    sudo("apt-key adv --keyserver hkp://pgp.mit.edu:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D")
+
+    distrib_codename = run("grep DISTRIB_CODENAME /etc/lsb-release |sed 's/.*=//'")
+    put(StringIO.StringIO('deb https://apt.dockerproject.org/repo ubuntu-{} main\n'.format(distrib_codename)),
+        '/etc/apt/sources.list.d/docker.list', use_sudo=True)
+    sudo('apt-get --yes --quiet update')
+    sudo('apt-cache policy docker-engine')
+    sudo('apt-get --yes --quiet install docker-engine')
+    sudo('adduser {} docker'.format(env.user))
+    sudo('sudo service docker restart')
     time.sleep(1)
     run("docker version")
 
@@ -125,6 +125,42 @@ def docker_version():
     run('status docker')
 
 @roles('all')
+def remove_everything():
+    # kill all containers
+    run("docker ps --format '{{ .ID }}' --no-trunc | xargs -n 1 --no-run-if-empty docker kill")
+    # remove all containers
+    run("docker ps --all --format '{{ .ID }}' --no-trunc | xargs -n 1 --no-run-if-empty docker rm")
+    # remove all volumes
+    run("docker volume ls | tail -n +2 | awk '{print $2}' | xargs -n 1 --no-run-if-empty docker volume rm")
+    # remove all images
+    run("docker images| tail -n +2 | awk '{print $3}' | xargs -n 1 --no-run-if-empty docker rmi")
+    # remove networks
+    sudo("docker network ls | tail -n +2 | grep calico | awk '{print $2}' | xargs -n 1 --no-run-if-empty docker network rm || true")
+    sudo('service docker stop || true')
+    sudo('service etcd stop || true')
+    sudo('rm -f /etc/init/etcd.conf /etc/default/docker')
+    # TODO: now remove leftover mount pounts. Maybe something like
+    if exists('/var/lib/docker'):
+        docker_libdir=run("readlink /var/lib/docker/ || true")
+        if docker_libdir == "":
+            docker_libdir = '/var/lib/docker'
+        sudo("grep {} /proc/mounts | xargs -n 1 --no-run-if-empty umount -f".format(docker_libdir))
+        sudo('rm -fr {}'.format(docker_libdir))
+    if exists('/run/docker'):
+        docker_rundir=run("readlink /run/docker/ || true")
+        if docker_rundir == "":
+            docker_rundir = '/run/docker'
+        # TODO: do we need something special for /run/docker/netns/* ?
+        sudo('rm -fr {}'.format(docker_rundir))
+    sudo('apt-get --yes purge docker-engine')
+    sudo('rm -fr /run/docker.pid /run/docker.sock')
+    # Note: etc uses the current directory to place the data subdirectory, and in the upstart config we
+    # chdir to the etcd source directory. Etcd then creates a subdirectory, owned by root.
+    # So we need to be root to remove this. TODO: run etcd under an "etcd" user.
+    sudo('rm -fr calicoctl etcd*')
+    sudo('rm -fr /var/log/calico /var/log/upstart/docker.log /var/log/upstart/etcd.log')
+
+@roles('all')
 def install_prerequisites():
     """ install OS pre-requisites """
     sudo("modprobe ip6_tables")
@@ -133,18 +169,15 @@ def install_prerequisites():
     append("/etc/modules", "xt_set", use_sudo=True)
     sudo("sysctl -w net.ipv6.conf.all.forwarding=1")
     sudo("echo net.ipv6.conf.all.forwarding=1 > /etc/sysctl.d/60-ipv6-forwarding.conf")
-    sudo("apt-get install -y unzip curl")
+    sudo("apt-get install --yes --quiet ipset unzip curl git")
 
 @roles('all')
 def install_calico():
-    """ Install Calico, inspired by https://github.com/Metaswitch/calico-ubuntu-vagrant """
+    """ Install Calico """
     # TODO: we want to install Calico somewhere more suitable
     if not exists("calicoctl"):
         run("wget -nv {}".format(CALICOCTL_URL))
         run("chmod +x calicoctl")
-
-    sudo("docker pull {}".format(CALICO_IMAGE), pty=False)
-    sudo("docker pull {}".format(ETCD_IMAGE), pty=False)
 
 def get_addressv4_address():
     """ utility method to return the ip address for the current host """
@@ -154,77 +187,79 @@ def get_addressv4_address():
         raise Exception("cannot get IP address")
     return ipv4_address
 
-@roles('all')
-def install_consul():
-    """ install Consul """
-    if env.host == env.consul_host and not exists("/usr/bin/consul"):
-        run("rm -f consul.zip consul")
-        run("curl -L --silent {} -o consul.zip".format(CONSUL_URL))
-        run("unzip consul.zip")
-        run("chmod +x consul")
-        sudo("mv consul /usr/bin/consul")
-        run("rm -f consul.zip")
+@roles('etcd')
+def install_etcd():
+    """ install etcd """
+    # See https://github.com/coreos/etcd/blob/master/Documentation/clustering.md#static
+    my_name = "etcd-{}".format(env.host)
+    initial_cluster_members = []
+    for name in sorted(env.cluster_address.keys()):
+        ipv4_address = env.cluster_address[name]
+        initial_cluster_members.append("etcd-{}=http://{}:{}".format(name, ipv4_address, env.etcd_peer_port))
+    initial_cluster = ",".join(initial_cluster_members)
 
-        ipv4_address = get_addressv4_address()
-        ctx = {
-            "consul_dir": '/usr/bin',
-            "ip_address": ipv4_address
-        }
-        upload_template(filename='consul.conf', destination='/etc/init/consul.conf',
-                        template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
+    etc_tgz = ETCD_URL.rpartition('/')[2]
+    etc_dir = etc_tgz.replace('.tar.gz', '')
+    if not exists(etc_tgz):
+        run("wget -nv {}".format(ETCD_URL))
+    if not exists(etc_dir):
+        run("tar xvzf {}".format(etc_tgz))
+    etcd_home = run("cd {}; /bin/pwd".format(etc_dir))
+    ipv4_address = get_addressv4_address()
+    ctx = {
+        "name": my_name,
+        "etcd_home": etcd_home,
+        "advertise_client_urls": 'http://{}:{}'.format(ipv4_address, env.etcd_client_port),
+        "listen_client_urls": 'http://0.0.0.0:{}'.format(env.etcd_client_port),
+        "advertise_peer_urls": 'http://{}:{}'.format(ipv4_address, env.etcd_peer_port),
+        "etcd_peer_port": env.etcd_peer_port,
+        "initial_cluster": initial_cluster
+    }
+    upload_template(filename='etcd.conf', destination='/etc/init/etcd.conf',
+                    template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
 
-        sudo("service consul start")
-        time.sleep(2)
+    sudo("service etcd restart")
+    time.sleep(2)
 
-    consul_address = env.cluster_addresss[env.consul_host]
-    append("/etc/default/docker",
-           'DOCKER_OPTS="--kv-store=consul:{}:8500"'.format(consul_address),
-           use_sudo=True)
+@roles('etcd')
+def install_docker_config():
+    # configure Docker to use our etcd cluster
+    initial_cluster_members = []
+    for name in sorted(env.cluster_address.keys()):
+        ipv4_address = env.cluster_address[name]
+        initial_cluster_members.append("{}:{}".format(ipv4_address, env.etcd_client_port))
+    initial_cluster = ",".join(initial_cluster_members)
+
+    # update DOCKER_OPTS. Note this also changes the -H to listen on tcp
+    ctx = {
+        "listen": "{}:{}".format(env.cluster_address[env.host], env.docker_port),
+        "cluster_store": "etcd://{}".format(initial_cluster),
+        "cluster_advertise": "{}:{}".format(env.cluster_address[env.host], env.docker_port)
+
+    }
+    upload_template(filename='docker.default', destination='/etc/default/docker',
+                    template_dir=TEMPLATES, context=ctx, use_sudo=True, use_jinja=True)
+
 
     sudo("service docker restart")
     time.sleep(5)
 
-@roles('all')
-def run_etcd():
-    """ Run etcd """
-    my_name = "etcd-{}".format(env.host)
-    initial_cluster_members = []
-    for name in sorted(env.cluster_addresss.keys()):
-        ipv4_address = env.cluster_addresss[name]
-        initial_cluster_members.append("etcd-{}=http://{}:7001".format(name, ipv4_address))
-    initial_cluster = ",".join(initial_cluster_members)
-    ipv4_address = get_addressv4_address()
-    run('docker pull {}'.format(ETCD_IMAGE), pty=False)
-    run("docker run -d "
-        "-p {etcd_client_port}:{etcd_client_port} -p {etcd_peer_port}:{etcd_peer_port} "
-        "--name quay.io-coreos-etcd "
-        "{etcd_image} "
-        "--name {my_name} "
-        "--advertise-client-urls http://{ipv4_address}:{etcd_client_port} "
-        "--listen-client-urls http://0.0.0.0:{etcd_client_port} "
-        "--initial-advertise-peer-urls http://{ipv4_address}:{etcd_peer_port} "
-        "--listen-peer-urls http://0.0.0.0:{etcd_peer_port} "
-        "--initial-cluster-token {etcd_cluster_token} "
-        "--initial-cluster {initial_cluster} "
-        "--initial-cluster-state new".format(ipv4_address=ipv4_address,
-                                             my_name=my_name,
-                                             etcd_image=ETCD_IMAGE,
-                                             etcd_cluster_token=env.etcd_cluster_token,
-                                             initial_cluster=initial_cluster,
-                                             etcd_peer_port=env.etcd_peer_port,
-                                             etcd_client_port=env.etcd_client_port))
-    time.sleep(2)
+
+@roles('etcd')
+def remove_etcd():
+    sudo("service etcd stop || true")
+    sudo("rm -fr etcd* /etc/init/etcd.conf /var/log/upstart/etcd.log")
 
 @roles('all')
 def docker_clean():
     """ remove containers that have exited """
     run("docker rm `docker ps --no-trunc --all --quiet --filter=status=exited`")
 
-@roles('all')
+@roles('etcd')
 def check_etcd():
-    """ check etcd """
-    run("curl -L http://localhost:4001/version")
-    run("curl -L http://localhost:4001/v2/machines")
+    """ check etcd: on each etcd host, talk to the local etcd server """
+    run("curl -L http://{}:{}/version".format("localhost", env.etcd_client_port))
+    run("curl -L http://{}:{}/v2/machines".format("localhost", env.etcd_client_port))
 
 @roles('all')
 def start_calico_containers():
@@ -233,7 +268,8 @@ def start_calico_containers():
     if existing == "":
         ipv4_address = get_addressv4_address()
         print "creating and starting calico-node"
-        sudo("./calicoctl node --ip={}".format(ipv4_address))
+        etcd_address = env.cluster_address[env.etcd_host]
+        sudo("ETCD_AUTHORITY={}:{} ./calicoctl node --libnetwork --ip={}".format(etcd_address, env.etcd_client_port, ipv4_address))
     elif "Up" in existing:
         print "calico-node already running"
         return
@@ -244,41 +280,12 @@ def start_calico_containers():
 @roles('docker_cli')
 def create_networks():
     """ create two example networks """
-    run("docker network create --driver=calico " + NET_ALPHA_BETA)
-    run("docker network create --driver=calico " + NET_SOLR)
-    run("docker network ls")
-
-def get_profile_for_network(wanted_name):
-    """ get the profile ID for a named network """
-    # there must be a better way to get profiles for named networks.
-    networks = run("docker network ls")
-    found_network_id = None
-    for line in networks.splitlines():
-        if line.startswith("NETWORK ID"):
-            continue # skip header
-        (network_id, name, _) = line.split()
-        if name == wanted_name:
-            found_network_id = network_id
-    if found_network_id == None:
-        raise Exception("network {} not found".format(wanted_name))
-    # the network ID is a short one like 6df57a08bc98. find the long version in the profiles
-    profiles = run("./calicoctl profile show")
-    for profile_line in profiles.splitlines():
-        match = re.search(r'\s({}\S+)'.format(found_network_id), profile_line)
-        if match is not None:
-            return match.group(1)
-    raise Exception("no profile found for network {}".format(found_network_id))
-
-
-@roles('docker_cli')
-def configure_network_profiles():
-    """ configure network profiles """
-    net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
-    run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
-
-    net_solr_profile = get_profile_for_network(NET_SOLR)
-    run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
-    run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
+    etcd_address = env.cluster_address[env.etcd_host]
+    with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
+        run("docker network ls")
+        run("docker network create --driver calico --ipam-driver calico " + NET_ALPHA_BETA)
+        run("docker network create --driver calico --ipam-driver calico " + NET_SOLR)
+        run("docker network ls")
 
 @roles('docker_cli')
 def calicoctl_pool():
@@ -286,8 +293,28 @@ def calicoctl_pool():
     run("./calicoctl pool show")
     run("./calicoctl pool add 192.168.89.0/24")
     run("./calicoctl pool remove 192.168.0.0/16")
-    run("./calicoctl pool add 192.168.89.0/24")
     run("./calicoctl pool show")
+
+def get_profile_for_network(wanted_name):
+    """ get the profile ID for a named network """
+    # there must be a better way to get profiles for named networks.
+    networks = run("docker network inspect {}".format(wanted_name))
+    if networks is None:
+        raise Exception("network {} not found".format(wanted_name))
+    networks_parsed = json.loads(networks)
+    return networks_parsed[0]["Id"]
+
+@roles('docker_cli')
+def configure_network_profiles():
+    """ configure network profiles """
+    etcd_address = env.cluster_address[env.etcd_host]
+    with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
+        net_ab_profile = get_profile_for_network(NET_ALPHA_BETA)
+        run("./calicoctl profile {} rule add inbound allow icmp".format(net_ab_profile))
+
+        net_solr_profile = get_profile_for_network(NET_SOLR)
+        run("./calicoctl profile {} rule add inbound allow icmp".format(net_solr_profile))
+        run("./calicoctl profile {} rule add inbound allow tcp to ports 8983".format(net_solr_profile))
 
 @roles('alpha_dockerhost')
 def create_test_container_alpha():
@@ -299,22 +326,6 @@ def create_test_container_beta():
     """ create second test container """
     create_test_container(TEST_BETA)
 
-@roles('alpha_dockerhost')
-def create_test_container_dcd():
-    """ experimental image to try and get solr working. TODO: remove """
-    image = "makuk66/docker-calico-devices:latest"
-    name = id_generator()
-    container_name = 'c-' + name
-    service_name = 'srv{}'.format(name)
-    full_service_name = '{}.{}.calico'.format(service_name, NET_SOLR)
-    run("docker pull {}".format(image), pty=False)
-    container_id = run("docker run --publish-service {} --name {} -tid {}".format(
-        full_service_name, container_name, image))
-    inspect_container(container_id)
-    container_name = run("docker inspect --format '{{.Name}}' " + container_id)[1:]
-    print "connect with: fab --host {} -- docker exec -it {} /bin/bash".format(
-        env.host, container_name)
-
 # http://stackoverflow.com/questions/2257441/random-string-generation-with-upper-case-letters-and-digits-in-python
 def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
     """ return a random identifier """
@@ -322,12 +333,10 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
 
 def create_test_container(name='', image=BUSYBOX_IMAGE):
     """ create a test container """
-    service_name = 'srv{}'.format(name)
-    full_service_name = '{}.{}.calico'.format(service_name, NET_ALPHA_BETA)
     container_name = 'c-' + name
     container_id = run("docker pull {}".format(image), pty=False)
-    container_id = run("docker run --publish-service {} --name {} -tid {}".format(
-        full_service_name, container_name, image))
+    container_id = run("docker run --net {} --name {} --hostname={}.{} -tid {}".format(
+        NET_ALPHA_BETA, container_name, container_name, NET_ALPHA_BETA, image))
     inspect_container(container_id)
 
 def inspect_container(container_name_or_id=''):
@@ -336,7 +345,8 @@ def inspect_container(container_name_or_id=''):
     container_name = run("docker inspect --format '{{.Name}}' " + container_name_or_id)
     if container_name[0] == '/':
         container_name = container_name[1:]
-    ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
+    net = run("docker inspect --format '{{ .HostConfig.NetworkMode }}' " + container_id)
+    ip_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + net + ".IPAddress }}' " + container_id)
     print "container_id={}, container_name={}, ip_address={}".format(
         container_id, container_name, ip_address)
     run("docker exec -i {} hostname".format(container_id))
@@ -351,30 +361,24 @@ def ping_test_containers():
     """ see if containers A and B can ping eachother """
     alpha_name = 'c-' + TEST_ALPHA
     beta_name = 'c-' + TEST_BETA
-    alpha_address = None
-    beta_address = None
     with settings(host_string=get_docker_host_for_role('alpha_dockerhost')):
-        alpha_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + alpha_name)
+        run("docker exec -i {} ping -c 1 {}.{}".format(alpha_name, beta_name, NET_ALPHA_BETA))
     with settings(host_string=get_docker_host_for_role('beta_dockerhost')):
-        beta_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + beta_name)
-    with settings(host_string=get_docker_host_for_role('alpha_dockerhost')):
-        run("docker exec -i {} ping -c 1 {}".format(alpha_name, beta_address))
-    with settings(host_string=get_docker_host_for_role('beta_dockerhost')):
-        run("docker exec -i {} ping -c 1 {}".format(beta_name, alpha_address))
+        run("docker exec -i {} ping -c 1 {}.{}".format(beta_name, alpha_name, NET_ALPHA_BETA))
 
 @roles('zookeeperdockerhost')
 def create_test_zookeeper():
     """ create zookeeper container """
     run("docker pull {}".format(ZOOKEEPER_IMAGE), pty=False)
-    container_id = run("docker run --publish-service zookeeper.{}.calico --name {} -tid {}".format(
-        NET_SOLR, ZOOKEEPER_NAME, ZOOKEEPER_IMAGE))
-    run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
+    container_id = run("docker run --net {} --name {} --hostname={}.{} -tid {}".format(
+        NET_SOLR, ZOOKEEPER_NAME, ZOOKEEPER_NAME, NET_SOLR, ZOOKEEPER_IMAGE))
+    inspect_container(ZOOKEEPER_NAME)
 
 @roles('all')
+@parallel
 def pull_docker_images():
     """ pull images we'll use """
-    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE,
-                  ETCD_IMAGE, CALICO_IMAGE]:
+    for image in [SOLR_IMAGE, ZOOKEEPER_IMAGE, BUSYBOX_IMAGE, UBUNTU_IMAGE, CALICO_IMAGE, CALICO_LIBNETWORK_IMAGE]:
         run("docker pull {}".format(image), pty=False)
 
 @roles('solr1dockerhost')
@@ -391,10 +395,10 @@ def create_test_solr(name):
     """ create a container running solr """
     run("docker pull {}".format(SOLR_IMAGE), pty=False)
     with settings(host_string=get_docker_host_for_role('zookeeperdockerhost')):
-        zookeeper_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + ZOOKEEPER_NAME)
-    container_id = run("docker run --publish-service {}.{}.calico --name {} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(
-        name, NET_SOLR, name, SOLR_IMAGE, zookeeper_address))
-    run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' " + container_id)
+        zookeeper_address = run("docker inspect --format '{{ .NetworkSettings.Networks." + NET_SOLR + ".IPAddress }}' " + ZOOKEEPER_NAME)
+    container_id = run("docker run --net {} --name {} --hostname={}.{} -tid {} bash -c '/opt/solr/bin/solr start -f -z {}:2181'".format(
+        NET_SOLR, name, name, NET_SOLR, SOLR_IMAGE, zookeeper_address))
+    inspect_container(name)
 
     time.sleep(15)
 
@@ -405,19 +409,10 @@ def create_test_solr(name):
 @roles('solrclientdockerhost')
 def create_test_solrclient():
     """ talk to both solr nodes from a container """
-    solr1_ip_address = None
-    with settings(host_string=get_docker_host_for_role('solr1dockerhost')):
-        solr1_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' solr1")
     name = 'solrclient-' + id_generator()
-    run("docker run --publish-service {}.{}.calico --name {} -i {} "
-        "curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr1_ip_address))
-
-    solr2_ip_address = None
-    with settings(host_string=get_docker_host_for_role('solr2dockerhost')):
-        solr2_ip_address = run("docker inspect --format '{{ .NetworkSettings.IPAddress }}' solr2")
+    run("docker run --net {} --name {} --hostname {}.{} -i {} curl -sSL http://solr1.{}:8983/".format(NET_SOLR, name, name, NET_SOLR, SOLR_IMAGE, NET_SOLR))
     name = 'solrclient-' + id_generator()
-    run("docker run --publish-service {}.{}.calico --name {} -i {} "
-        "curl -sSL http://{}:8983/".format(name, NET_SOLR, name, SOLR_IMAGE, solr2_ip_address))
+    run("docker run --net {} --name {} --hostname {}.{} -i {} curl -sSL http://solr2.{}:8983/".format(NET_SOLR, name, name, NET_SOLR, SOLR_IMAGE, NET_SOLR))
 
 @roles('solr1dockerhost')
 def solr_collection():
@@ -429,12 +424,14 @@ def solr_collection():
 def solr_data():
     """ load test data into solr """
     run("docker exec -it --user=solr solr1 "
-        "bin/post -c {} /opt/solr/example/exampledocs/books.json".format(SOLR_COLLECTION))
+        "bin/post -c {} /opt/solr/example/exampledocs/manufacturers.xml".format(SOLR_COLLECTION))
 
 @roles('docker_cli')
 def add_bgp_peer():
     """ configure BGP peer """
-    run("./calicoctl bgp peer add 192.168.77.1 as 64511")
+    etcd_address = env.cluster_address[env.etcd_host]
+    with shell_env(ETCD_AUTHORITY='{}:{}'.format(etcd_address, env.etcd_client_port)):
+        run("./calicoctl bgp peer add 192.168.77.1 as 64511")
 
 @roles('all')
 def docker_ps():
@@ -448,13 +445,14 @@ def install():
     execute(copy_ssh_key)
     execute(setup_sudoers)
     execute(install_prerequisites)
-    execute(install_experimental_docker)
+    execute(install_docker)
     execute(docker_version)
     execute(pull_docker_images)
+
     execute(install_calico)
-    execute(install_consul)
-    execute(run_etcd)
+    execute(install_etcd)
     execute(check_etcd)
+    execute(install_docker_config)
     execute(start_calico_containers)
     execute(calicoctl_pool)
     execute(create_networks)
